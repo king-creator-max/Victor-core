@@ -1,0 +1,15 @@
+{
+  "name": "victor-cognitive-core",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "cloud_server.mjs",
+  "scripts": {
+    "start": "node cloud_server.mjs"
+  },
+  "dependencies": {
+    "@gradio/client": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
