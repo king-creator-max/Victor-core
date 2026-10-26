@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { exec } from 'child_process';
 import { Client } from '@gradio/client';
 
-const PORT = 8080;
+const PORT = process.env.PORT || 8080;
 const home = os.homedir();
 const vaultFile = path.join(home, '.victor_vault.json');
 const memFile = path.join(home, '.victor_memory.json');
