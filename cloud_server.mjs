@@ -585,7 +585,10 @@ const HTML_SCRIPT = `
         const d = await r.json();
         return d.choices?.[0]?.message?.content || 'No response.';
       }
-      return 'Paste your gsk_ or sk_ key in chat, Sir.';
+      // Auto-fallback to environment keys
+  activeGroqKey = process.env.GROQ_API_KEY;
+  activePollKey = process.env.POLLINATIONS_API_KEY;
+  if (activeGroqKey) return null; // Proceed normally
     }
 
     async function recordTurn(userMsg, victorReply) {
