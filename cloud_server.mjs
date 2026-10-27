@@ -1,3 +1,4 @@
+import { MongoClient } from "mongodb";
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -13,6 +14,40 @@ const memFile = path.join(home, '.victor_memory.json');
 const mediaDir = path.join(home, 'victor-media');
 const projectsDir = path.join(home, 'victor-projects');
 [mediaDir, projectsDir].forEach(d => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); });
+
+// --- MONGODB ATLAS PERMANENT STORAGE ENGINE ---
+let mongoCol = null;
+const origWriteFileSync = fs.writeFileSync.bind(fs);
+
+if (process.env.MONGODB_URI) {
+  try {
+    const client = new MongoClient(process.env.MONGODB_URI);
+    await client.connect();
+    mongoCol = client.db("victor_core").collection("storage");
+    console.log("✅ Connected to MongoDB Atlas Permanent Storage");
+
+    const vaultDoc = await mongoCol.findOne({ _id: "vault" });
+    if (vaultDoc && vaultDoc.data) origWriteFileSync(vaultFile, vaultDoc.data);
+
+    const memDoc = await mongoCol.findOne({ _id: "memory" });
+    if (memDoc && memDoc.data) origWriteFileSync(memFile, memDoc.data);
+  } catch (err) {
+    console.error("⚠️ MongoDB connection error:", err.message);
+  }
+}
+
+fs.writeFileSync = function(file, data, options) {
+  origWriteFileSync(file, data, options);
+  if (mongoCol) {
+    const strData = typeof data === "string" ? data : data.toString("utf8");
+    if (file === vaultFile) {
+      mongoCol.updateOne({ _id: "vault" }, { $set: { data: strData, updatedAt: new Date() } }, { upsert: true }).catch(() => {});
+    } else if (file === memFile) {
+      mongoCol.updateOne({ _id: "memory" }, { $set: { data: strData, updatedAt: new Date() } }, { upsert: true }).catch(() => {});
+    }
+  }
+};
+// ----------------------------------------------
 
 const MASTER_PASS = '@stark1082011';
 const PASS_B64 = Buffer.from(MASTER_PASS).toString('base64');
