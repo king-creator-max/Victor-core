@@ -722,3 +722,16 @@ http.createServer(async (req, res) => {
   console.log('======================================================\n');
   exec('termux-open-url ' + url + ' 2>/dev/null || am start -a android.intent.action.VIEW -d "' + url + '" 2>/dev/null');
 });
+
+// Auto-seed vault from Environment Variables if empty
+if (process.env.GROQ_API_KEY && fs.existsSync(vaultFile)) {
+  try {
+    let vData = JSON.parse(fs.readFileSync(vaultFile, "utf8") || "{}");
+    if (!vData.groqKey) {
+      vData.groqKey = process.env.GROQ_API_KEY;
+      if (process.env.POLLINATIONS_API_KEY) vData.pollKey = process.env.POLLINATIONS_API_KEY;
+      fs.writeFileSync(vaultFile, JSON.stringify(vData, null, 2));
+      console.log("✅ Auto-seeded vault with environment API keys!");
+    }
+  } catch(e) {}
+}
