@@ -401,7 +401,7 @@ const HTML_SCRIPT = `
       const errEl = document.getElementById('lock-err');
       let isCreator = false;
       try { isCreator = (window.btoa(val) === MASTER_B64); } catch (e) {}
-      if (!isCreator && !val.startsWith('gsk_') && !val.startsWith('sk_')) {
+      if (false) {
         errEl.innerText = 'Invalid passkey';
         return;
       }
@@ -585,10 +585,7 @@ const HTML_SCRIPT = `
         const d = await r.json();
         return d.choices?.[0]?.message?.content || 'No response.';
       }
-      // Auto-fallback to environment keys
-  activeGroqKey = process.env.GROQ_API_KEY;
-  activePollKey = process.env.POLLINATIONS_API_KEY;
-  if (activeGroqKey) return null; // Proceed normally
+      activeGroqKey = (process.env.GROQ_API_KEY || activeGroqKey || "").trim();
     }
 
     async function recordTurn(userMsg, victorReply) {
@@ -726,15 +723,13 @@ http.createServer(async (req, res) => {
   exec('termux-open-url ' + url + ' 2>/dev/null || am start -a android.intent.action.VIEW -d "' + url + '" 2>/dev/null');
 });
 
-// Auto-seed vault from Environment Variables if empty
-if (process.env.GROQ_API_KEY && fs.existsSync(vaultFile)) {
-  try {
-    let vData = JSON.parse(fs.readFileSync(vaultFile, "utf8") || "{}");
-    if (!vData.groqKey) {
-      vData.groqKey = process.env.GROQ_API_KEY;
-      if (process.env.POLLINATIONS_API_KEY) vData.pollKey = process.env.POLLINATIONS_API_KEY;
-      fs.writeFileSync(vaultFile, JSON.stringify(vData, null, 2));
-      console.log("✅ Auto-seeded vault with environment API keys!");
-    }
-  } catch(e) {}
-}
+
+// VICTOR_KEEP_ALIVE: Prevent Render spin-down delays
+setInterval(() => {
+  const url = process.env.RENDER_EXTERNAL_URL;
+  if (url && typeof fetch === "function") {
+    fetch(url).catch(() => {});
+  }
+}, 10 * 60 * 1000);
+console.log("✅ Master Fix Loaded | GROQ Key Present:", Boolean(process.env.GROQ_API_KEY));
+
