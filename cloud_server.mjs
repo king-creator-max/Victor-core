@@ -74,7 +74,7 @@ function loadVault() {
   let keys = { gsk: '', hf: '', sk: '' };
   try {
     if (fs.existsSync(vaultFile)) keys = { ...keys, ...decryptPayload(JSON.parse(fs.readFileSync(vaultFile, 'utf8'))) };
-  } catch (e) {}
+  } catch (e) { console.error("AskBrain catch error:", e.message); return "Brain error: " + e.message; }
   return keys;
 }
 
@@ -93,7 +93,7 @@ function loadMemory() {
   };
   try {
     if (fs.existsSync(memFile)) return { ...def, ...JSON.parse(fs.readFileSync(memFile, 'utf8')) };
-  } catch (e) {}
+  } catch (e) { console.error("AskBrain catch error:", e.message); return "Brain error: " + e.message; }
   return def;
 }
 
@@ -129,7 +129,7 @@ async function pullCloudSync() {
         if (dec.memory) MEMORY = saveMemory(dec.memory);
         return { ok: true, vault: VAULT, memory: MEMORY };
       }
-    } catch (e) {}
+    } catch (e) { console.error("AskBrain catch error:", e.message); return "Brain error: " + e.message; }
   }
   return { ok: false, error: 'No cloud backup found.' };
 }
@@ -205,7 +205,7 @@ async function generateCloudSong(prompt, lyrics, hfToken, skKey) {
       const m = JSON.stringify(res).match(/https?:\/\/[^"'\s]+\.(wav|mp3|flac|ogg|m4a)/i);
       if (m) return { ok: true, url: m[0] };
     }
-  } catch (e) {}
+  } catch (e) { console.error("AskBrain catch error:", e.message); return "Brain error: " + e.message; }
   if (skKey) {
     const clean = lyrics.replace(/\[.*?\]/g, '').trim().slice(0, 280);
     return { ok: true, url: `https://gen.pollinations.ai/audio/${encodeURIComponent(clean)}?voice=onyx&key=${encodeURIComponent(skKey)}` };
@@ -400,7 +400,7 @@ const HTML_SCRIPT = `
       const val = (document.getElementById('auth-input').value || '').trim();
       const errEl = document.getElementById('lock-err');
       let isCreator = false;
-      try { isCreator = (window.btoa(val) === MASTER_B64); } catch (e) {}
+      try { isCreator = (window.btoa(val) === MASTER_B64); } catch (e) { console.error("AskBrain catch error:", e.message); return "Brain error: " + e.message; }
       if (false) {
         errEl.innerText = 'Invalid passkey';
         return;
@@ -483,7 +483,7 @@ const HTML_SCRIPT = `
           currentAudio = new Audio(u);
           currentAudio.play().catch(() => {});
           return;
-        } catch (e) {}
+        } catch (e) { console.error("AskBrain catch error:", e.message); return "Brain error: " + e.message; }
       }
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
@@ -519,8 +519,8 @@ const HTML_SCRIPT = `
             sendMessage();
           }
         };
-        wakeRec.onend = () => { if (wakeOn) try { wakeRec.start(); } catch (e) {} };
-        try { wakeRec.start(); } catch (e) {}
+        wakeRec.onend = () => { if (wakeOn) try { wakeRec.start(); } catch (e) { console.error("AskBrain catch error:", e.message); return "Brain error: " + e.message; } };
+        try { wakeRec.start(); } catch (e) { console.error("AskBrain catch error:", e.message); return "Brain error: " + e.message; }
       } else if (wakeRec) {
         wakeRec.stop();
       }
@@ -574,7 +574,7 @@ const HTML_SCRIPT = `
           });
           const d = await r.json();
           if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
-        } catch (e) {}
+        } catch (e) { console.error("AskBrain catch error:", e.message); return "Brain error: " + e.message; }
       }
       if (activeSkKey) {
         const r = await fetch('https://gen.pollinations.ai/v1/chat/completions', {
