@@ -1,96 +1,3 @@
-
-// === VICTOR HYBRID MULTI-API ROUTER ===
-const _nativeFetch = globalThis.fetch;
-
-async function searchWebTavily(query) {
-  if (!process.env.TAVILY_API_KEY) return "";
-  try {
-    const r = await _nativeFetch("https://api.tavily.com/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: process.env.TAVILY_API_KEY,
-        query,
-        max_results: 3
-      })
-    });
-    const d = await r.json();
-    return d.results ? d.results.map(x => x.content).join("\n\n") : "";
-  } catch (e) {
-    return "";
-  }
-}
-
-globalThis.fetch = async function(url, options = {}) {
-  const urlStr = typeof url === "string" ? url : url.toString();
-
-  // Intercept LLM chat completion calls for automatic multi-provider failover
-  if (urlStr.includes("api.groq.com/openai/v1/chat/completions")) {
-    let bodyObj = {};
-    try { bodyObj = JSON.parse(options.body || "{}"); } catch (e) {}
-
-    const engines = [
-      {
-        name: "Groq",
-        key: process.env.GROQ_API_KEY,
-        endpoint: "https://api.groq.com/openai/v1/chat/completions",
-        model: bodyObj.model || "llama-3.3-70b-versatile"
-      },
-      {
-        name: "Gemini",
-        key: process.env.GEMINI_API_KEY,
-        endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        model: "gemini-2.5-flash"
-      },
-      {
-        name: "NVIDIA NIM",
-        key: process.env.NVIDIA_API_KEY,
-        endpoint: "https://integrate.api.nvidia.com/v1/chat/completions",
-        model: "meta/llama-3.3-70b-instruct"
-      },
-      {
-        name: "AIML API",
-        key: process.env.AIML_API_KEY,
-        endpoint: "https://api.aimlapi.com/v1/chat/completions",
-        model: "gpt-4o-mini"
-      }
-    ].filter(e => Boolean(e.key && e.key.trim()));
-
-    for (const engine of engines) {
-      try {
-        const payload = { ...bodyObj, model: engine.model };
-        const res = await _nativeFetch(engine.endpoint, {
-          ...options,
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + engine.key.trim()
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (res.ok) {
-          console.log("✅ Answered via Engine:", engine.name);
-          return res;
-        }
-        console.warn("⚠️ Engine " + engine.name + " returned HTTP " + res.status + " -> failing over...");
-      } catch (err) {
-        console.warn("⚠️ Engine " + engine.name + " network error -> failing over...");
-      }
-    }
-  }
-
-  return _nativeFetch(url, options);
-};
-
-// Keep Render awake every 10 minutes
-setInterval(() => {
-  if (process.env.RENDER_EXTERNAL_URL) {
-    _nativeFetch(process.env.RENDER_EXTERNAL_URL).catch(() => {});
-  }
-}, 10 * 60 * 1000);
-// === END VICTOR HYBRID ROUTER ===
-
 import { MongoClient } from "mongodb";
 import http from 'http';
 import fs from 'fs';
@@ -678,7 +585,7 @@ const HTML_SCRIPT = `
         const d = await r.json();
         return d.choices?.[0]?.message?.content || 'No response.';
       }
-      activeGroqKey = (process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || process.env.NVIDIA_API_KEY || process.env.AIML_API_KEY || "HYBRID_READY").trim();
+      activeGroqKey = "${(process.env.GROQ_API_KEY || process.env.AIML_API_KEY || process.env.GEMINI_API_KEY || process.env.NVIDIA_API_KEY || "").trim()}";
     }
 
     async function recordTurn(userMsg, victorReply) {
