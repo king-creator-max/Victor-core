@@ -1,39 +1,3 @@
-
-// === VICTOR BACKEND HYBRID MULTI-API ROUTER ===
-async function callHybridBrain(messages, modelHint) {
-  const providers = [
-    { name: "Groq", key: process.env.GROQ_API_KEY, url: "https://api.groq.com/openai/v1/chat/completions", model: modelHint || "llama-3.3-70b-versatile" },
-    { name: "Gemini", key: process.env.GEMINI_API_KEY, url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", model: "gemini-2.5-flash" },
-    { name: "NVIDIA NIM", key: process.env.NVIDIA_API_KEY, url: "https://integrate.api.nvidia.com/v1/chat/completions", model: "meta/llama-3.3-70b-instruct" },
-    { name: "AIML API", key: process.env.AIML_API_KEY, url: "https://api.aimlapi.com/v1/chat/completions", model: "gpt-4o-mini" }
-  ].filter(p => Boolean(p.key && p.key.trim()));
-
-  for (const p of providers) {
-    try {
-      const res = await fetch(p.url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + p.key.trim()
-        },
-        body: JSON.stringify({ model: p.model, messages })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const reply = data.choices?.[0]?.message?.content;
-        if (reply) {
-          console.log("✅ Hybrid Router successfully answered via:", p.name);
-          return reply;
-        }
-      }
-    } catch (e) {
-      console.warn("⚠️ Provider " + p.name + " failed, trying next...");
-    }
-  }
-  return "Error: All hybrid AI providers exhausted or keys missing in Render environment variables.";
-}
-// === END HYBRID ROUTER ===
-
 import { MongoClient } from "mongodb";
 import http from 'http';
 import fs from 'fs';
@@ -437,7 +401,7 @@ const HTML_SCRIPT = `
       const errEl = document.getElementById('lock-err');
       let isCreator = false;
       try { isCreator = (window.btoa(val) === MASTER_B64); } catch (e) {}
-      if (false) {
+      if (!isCreator && !val.startsWith('gsk_') && !val.startsWith('sk_')) {
         errEl.innerText = 'Invalid passkey';
         return;
       }
@@ -758,3 +722,34 @@ http.createServer(async (req, res) => {
   console.log('======================================================\n');
   exec('termux-open-url ' + url + ' 2>/dev/null || am start -a android.intent.action.VIEW -d "' + url + '" 2>/dev/null');
 });
+
+// === VICTOR SAFE BACKEND HYBRID ROUTER ===
+async function routeHybridChat(messages, requestedModel) {
+  const providers = [
+    { name: "Groq", key: process.env.GROQ_API_KEY, url: "https://api.groq.com/openai/v1/chat/completions", model: requestedModel || "llama-3.3-70b-versatile" },
+    { name: "Gemini", key: process.env.GEMINI_API_KEY, url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", model: "gemini-2.5-flash" },
+    { name: "NVIDIA NIM", key: process.env.NVIDIA_API_KEY, url: "https://integrate.api.nvidia.com/v1/chat/completions", model: "meta/llama-3.3-70b-instruct" },
+    { name: "AIML API", key: process.env.AIML_API_KEY, url: "https://api.aimlapi.com/v1/chat/completions", model: "gpt-4o-mini" }
+  ].filter(p => Boolean(p.key && p.key.trim().length > 5));
+
+  if (providers.length === 0) return "Error: No API keys found in Render environment variables.";
+
+  for (const p of providers) {
+    try {
+      const res = await fetch(p.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + p.key.trim() },
+        body: JSON.stringify({ model: p.model, messages, temperature: 0.7 })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const reply = data.choices?.[0]?.message?.content;
+        if (reply) return reply;
+      }
+    } catch (e) {}
+  }
+  return "Error: All hybrid AI providers failed or exhausted rate limits.";
+}
+
+// Ensure Express parses JSON if not already present
+// (Handled natively)
