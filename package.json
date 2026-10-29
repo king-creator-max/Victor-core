@@ -4,8 +4,7 @@
   "type": "module",
   "main": "cloud_server.mjs",
   "scripts": {
-    "start": "node cloud_server.mjs",
-    "postinstall": "node -e \"if (process.platform === 'linux') { require('child_process').execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' }); }\""
+    "start": "node cloud_server.mjs"
   },
   "dependencies": {
     "@gradio/client": "^1.6.0",

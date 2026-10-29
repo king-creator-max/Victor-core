@@ -1,9 +1,24 @@
-FROM node:20-bookworm-slim
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+FROM node:20-alpine
+
+# Install native Linux Chromium + essential rendering fonts & libraries
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# Tell Puppeteer to use the native OS Chromium binary instead of downloading
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
 WORKDIR /app
-COPY package.json ./
+
+COPY package*.json ./
 RUN npm install
+
 COPY cloud_server.mjs ./
+
 EXPOSE 8080
-ENV PORT=8080
-CMD ["npm", "start"]
+CMD ["node", "cloud_server.mjs"]

@@ -1,5 +1,7 @@
 
 // === VICTOR MASTER CHROMIUM ENGINE ===
+
+
 let _puppeteer = null;
 async function getPuppeteer() {
   if (!_puppeteer) {
@@ -9,14 +11,25 @@ async function getPuppeteer() {
   return _puppeteer;
 }
 
+function getChromiumPath() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  const paths = ['/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/google-chrome-stable'];
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return undefined;
+}
+
 async function executeChromiumTask(queryOrUrl, requestedAction = 'auto') {
   let browser = null;
   try {
     const urlMatch = (queryOrUrl || '').match(/https?:\/\/[^\s"']+/i);
     let targetUrl = urlMatch ? urlMatch[0] : null;
-    const isScreenshot = /screenshot|snapshot|capture|visual/i.test(queryOrUrl) || requestedAction === 'screenshot';
+    const isScreenshot = /screenshot|snapshot|capture|visual|ui|inspect/i.test(queryOrUrl) || requestedAction === 'screenshot';
+    const jsEvalMatch = (queryOrUrl || '').match(/eval:\s*(.+)$/i);
 
-    // If no direct URL was given, search via Tavily or DuckDuckGo Lite first
     let searchSummary = '';
     if (!targetUrl) {
       if (process.env.TAVILY_API_KEY) {
@@ -41,6 +54,7 @@ async function executeChromiumTask(queryOrUrl, requestedAction = 'auto') {
     const puppeteer = await getPuppeteer();
     browser = await puppeteer.launch({
       headless: 'new',
+      executablePath: getChromiumPath(),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -49,39 +63,94 @@ async function executeChromiumTask(queryOrUrl, requestedAction = 'auto') {
         '--no-first-run',
         '--no-zygote',
         '--single-process',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-web-security'
       ]
     });
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
-    await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+    await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
 
-    await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 25000 });
-
-    const pageData = await page.evaluate(() => {
-      const title = document.title || '';
-      const text = document.body ? document.body.innerText : '';
-      return { title, text: text.replace(/\s+/g, ' ').trim().slice(0, 6000) };
+    // 1. Raw V8 Console & Network API Sniffer
+    const consoleLogs = [];
+    const networkApis = [];
+    page.on('console', msg => {
+      if (consoleLogs.length < 15) consoleLogs.push(`[${msg.type().toUpperCase()}] ${msg.text()}`);
+    });
+    page.on('response', async res => {
+      try {
+        const ct = res.headers()['content-type'] || '';
+        const reqType = res.request().resourceType();
+        if ((reqType === 'xhr' || reqType === 'fetch' || ct.includes('json')) && networkApis.length < 10) {
+          networkApis.push(`[${res.status()}] ${res.request().method()} ${res.url().slice(0, 120)}`);
+        }
+      } catch (e) {}
     });
 
+    // 2. Navigate & Auto-Scroll to trigger lazy-loaded SPA components
+    await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 28000 });
+    await page.evaluate(async () => {
+      window.scrollBy(0, 500);
+      await new Promise(r => setTimeout(r, 400));
+      window.scrollTo(0, 0);
+    });
+
+    // 3. Optional Raw V8 JS Evaluation if requested via "eval: <code_here>"
+    let customEvalResult = '';
+    if (jsEvalMatch && jsEvalMatch[1]) {
+      try {
+        const res = await page.evaluate((codeStr) => eval(codeStr), jsEvalMatch[1]);
+        customEvalResult = JSON.stringify(res, null, 2);
+      } catch (evalErr) {
+        customEvalResult = 'V8 Eval Error: ' + evalErr.message;
+      }
+    }
+
+    // 4. Deep DOM & Interactive Element Extraction
+    const domIntel = await page.evaluate(() => {
+      const title = document.title || '';
+      const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
+      const headings = Array.from(document.querySelectorAll('h1, h2, h3'))
+        .map(h => h.innerText.trim()).filter(Boolean).slice(0, 15).join(' | ');
+      const interactives = Array.from(document.querySelectorAll('a[href], button, input, select'))
+        .map((el, idx) => {
+          const tag = el.tagName.toLowerCase();
+          const label = (el.innerText || el.placeholder || el.getAttribute('aria-label') || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+          const href = el.getAttribute('href') || '';
+          return label ? `[${idx + 1}] <${tag}> "${label}"${href ? ' -> ' + href.slice(0, 60) : ''}` : null;
+        }).filter(Boolean).slice(0, 20).join('\n');
+      const bodyText = (document.body ? document.body.innerText : '').replace(/\s+/g, ' ').trim().slice(0, 5500);
+      return { title, metaDesc, headings, interactives, bodyText };
+    });
+
+    // 5. Capture Raw CDP Performance Metrics & Visual Snapshot
+    const metrics = await page.metrics();
     let screenshotBase64 = null;
-    if (isScreenshot) {
+    if (isScreenshot || urlMatch) {
       screenshotBase64 = await page.screenshot({ encoding: 'base64', fullPage: false });
     }
 
     await browser.close();
 
     const intelReport = [
-      `[CHROMIUM LIVE RENDER: ${pageData.title} | ${targetUrl}]`,
+      `=== [VICTOR RAW CHROMIUM CDP ENGINE] ===`,
+      `Target URL: ${targetUrl}`,
+      `Page Title: ${domIntel.title}`,
+      `V8 Heap Used: ${Math.round((metrics.JSHeapUsedSize || 0) / 1024 / 1024)} MB | DOM Nodes: ${metrics.Nodes || 'N/A'}`,
       searchSummary ? `\n--- Search Context ---\n${searchSummary}` : '',
-      `\n--- Live DOM Extracted Content ---\n${pageData.text}`
+      customEvalResult ? `\n--- V8 Custom JS Eval Output ---\n${customEvalResult}` : '',
+      networkApis.length ? `\n--- Intercepted XHR/Fetch Network APIs ---\n${networkApis.join('\n')}` : '',
+      consoleLogs.length ? `\n--- Live V8 Console Logs ---\n${consoleLogs.join('\n')}` : '',
+      domIntel.headings ? `\n--- Key Headings ---\n${domIntel.headings}` : '',
+      domIntel.interactives ? `\n--- Interactive DOM Map ---\n${domIntel.interactives}` : '',
+      `\n--- Rendered DOM Text ---\n${domIntel.bodyText}`
     ].filter(Boolean).join('\n');
 
     return {
       ok: true,
       url: targetUrl,
-      title: pageData.title,
+      title: domIntel.title,
       intel: intelReport,
       screenshot: screenshotBase64 ? `data:image/png;base64,${screenshotBase64}` : null
     };
@@ -97,6 +166,9 @@ async function executeChromiumTask(queryOrUrl, requestedAction = 'auto') {
   }
 }
 // === END VICTOR MASTER CHROMIUM ENGINE ===
+
+
+
 
 import { MongoClient } from "mongodb";
 import http from 'http';
