@@ -1,3 +1,103 @@
+
+// === VICTOR MASTER CHROMIUM ENGINE ===
+let _puppeteer = null;
+async function getPuppeteer() {
+  if (!_puppeteer) {
+    const mod = await import('puppeteer');
+    _puppeteer = mod.default || mod;
+  }
+  return _puppeteer;
+}
+
+async function executeChromiumTask(queryOrUrl, requestedAction = 'auto') {
+  let browser = null;
+  try {
+    const urlMatch = (queryOrUrl || '').match(/https?:\/\/[^\s"']+/i);
+    let targetUrl = urlMatch ? urlMatch[0] : null;
+    const isScreenshot = /screenshot|snapshot|capture|visual/i.test(queryOrUrl) || requestedAction === 'screenshot';
+
+    // If no direct URL was given, search via Tavily or DuckDuckGo Lite first
+    let searchSummary = '';
+    if (!targetUrl) {
+      if (process.env.TAVILY_API_KEY) {
+        try {
+          const r = await fetch('https://api.tavily.com/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: queryOrUrl, max_results: 3 })
+          });
+          const d = await r.json();
+          if (d.results && d.results.length > 0) {
+            targetUrl = d.results[0].url;
+            searchSummary = d.results.map(x => `• ${x.title} (${x.url}): ${x.content}`).join('\n');
+          }
+        } catch (e) {}
+      }
+      if (!targetUrl) {
+        targetUrl = 'https://lite.duckduckgo.com/lite/?q=' + encodeURIComponent(queryOrUrl);
+      }
+    }
+
+    const puppeteer = await getPuppeteer();
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu'
+      ]
+    });
+
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720 });
+    await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+
+    await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 25000 });
+
+    const pageData = await page.evaluate(() => {
+      const title = document.title || '';
+      const text = document.body ? document.body.innerText : '';
+      return { title, text: text.replace(/\s+/g, ' ').trim().slice(0, 6000) };
+    });
+
+    let screenshotBase64 = null;
+    if (isScreenshot) {
+      screenshotBase64 = await page.screenshot({ encoding: 'base64', fullPage: false });
+    }
+
+    await browser.close();
+
+    const intelReport = [
+      `[CHROMIUM LIVE RENDER: ${pageData.title} | ${targetUrl}]`,
+      searchSummary ? `\n--- Search Context ---\n${searchSummary}` : '',
+      `\n--- Live DOM Extracted Content ---\n${pageData.text}`
+    ].filter(Boolean).join('\n');
+
+    return {
+      ok: true,
+      url: targetUrl,
+      title: pageData.title,
+      intel: intelReport,
+      screenshot: screenshotBase64 ? `data:image/png;base64,${screenshotBase64}` : null
+    };
+  } catch (err) {
+    if (browser) {
+      try { await browser.close(); } catch (e) {}
+    }
+    return {
+      ok: false,
+      intel: `Chromium Engine Fallback (${err.message}). Query: ${queryOrUrl}`,
+      screenshot: null
+    };
+  }
+}
+// === END VICTOR MASTER CHROMIUM ENGINE ===
+
 import { MongoClient } from "mongodb";
 import http from 'http';
 import fs from 'fs';
@@ -622,7 +722,7 @@ const HTML_SCRIPT = `
         const r = await fetch('/api/research', { method: 'POST', body: JSON.stringify({ query: msg }) });
         const d = await r.json();
         const ans = await askBrain(memoryState.persona + '\\nLive web data:\\n' + d.intel, msg, true);
-        b.innerHTML = formatMd(ans);
+        b.innerHTML = (d.screenshot ? '<img src="' + d.screenshot + '" style="max-width:100%;border-radius:10px;margin-bottom:10px;border:1px solid #333;" /><br>' : '') + formatMd(ans);
         recordTurn(msg, ans); speakNeural(ans); setMode('auto'); return;
       }
 
@@ -683,6 +783,25 @@ const HTML_SCRIPT = `
 const FULL_HTML = Buffer.from(HTML_UI + HTML_SCRIPT, 'utf8');
 
 http.createServer(async (req, res) => {
+
+  if ((req.url === '/api/research' || req.url === '/api/browser') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const parsed = JSON.parse(body || '{}');
+        const target = parsed.query || parsed.url || '';
+        const result = await executeChromiumTask(target, parsed.action || 'auto');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ intel: 'Chromium Route Error: ' + e.message }));
+      }
+    });
+    return;
+  }
+
   if (req.url.startsWith('/media/')) {
     const file = path.join(mediaDir, path.basename(req.url));
     if (fs.existsSync(file)) {
