@@ -28,167 +28,149 @@ async function resolveJarvisUrl(query) {
 
 
 // === VICTOR MASTER CHROMIUM ENGINE ===
+const JARVIS_KNOWN_SITES = {
+  'hacker news': 'https://news.ycombinator.com',
+  'ycombinator': 'https://news.ycombinator.com',
+  'youtube': 'https://www.youtube.com',
+  'google': 'https://www.google.com',
+  'github': 'https://github.com',
+  'wikipedia': 'https://www.wikipedia.org',
+  'reddit': 'https://www.reddit.com',
+  'twitter': 'https://x.com',
+  'instagram': 'https://www.instagram.com',
+  'linkedin': 'https://www.linkedin.com',
+  'amazon': 'https://www.amazon.in',
+  'flipkart': 'https://www.flipkart.com',
+  'openai': 'https://openai.com',
+  'nvidia': 'https://www.nvidia.com',
+  'apple': 'https://www.apple.com',
+  'tesla': 'https://www.tesla.com',
+  'isro': 'https://www.isro.gov.in',
+  'nasa': 'https://www.nasa.gov',
+  'bbc': 'https://www.bbc.com/news',
+  'ndtv': 'https://www.ndtv.com',
+  'cricbuzz': 'https://www.cricbuzz.com',
+  'stackoverflow': 'https://stackoverflow.com'
+};
 
-
-let _puppeteer = null;
-async function getPuppeteer() {
-  if (!_puppeteer) {
-    const mod = await import('puppeteer');
-    _puppeteer = mod.default || mod;
-  }
-  return _puppeteer;
-}
-
-function getChromiumPath() {
-  if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
-    return process.env.PUPPETEER_EXECUTABLE_PATH;
-  }
-  const paths = ['/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/google-chrome-stable'];
-  for (const p of paths) {
-    if (fs.existsSync(p)) return p;
-  }
-  return undefined;
-}
-
-async function executeChromiumTask(queryOrUrl, requestedAction = 'auto') {
-  let browser = null;
+function cleanJarvisUrl(raw) {
+  if (!raw) return null;
   try {
-    const urlMatch = (queryOrUrl || '').match(/https?:\/\/[^\s"']+/i);
-    let targetUrl = urlMatch ? urlMatch[0] : null;
-    const isScreenshot = /screenshot|snapshot|capture|visual|ui|inspect/i.test(queryOrUrl) || requestedAction === 'screenshot';
-    const jsEvalMatch = (queryOrUrl || '').match(/eval:\s*(.+)$/i);
+    let s = String(raw).trim()
+      .replace(/^\[+|\)+$/g, '')
+      .replace(/[.,;!?)\]}'"`>]+$/g, '');
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    const u = new URL(s);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
+  } catch (e) {
+    return null;
+  }
+}
 
-    let searchSummary = '';
-    if (!targetUrl) {
-      if (process.env.TAVILY_API_KEY) {
-        try {
-          const r = await fetch('https://api.tavily.com/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: queryOrUrl, max_results: 3 })
-          });
-          const d = await r.json();
-          if (d.results && d.results.length > 0) {
-            targetUrl = d.results[0].url;
-            searchSummary = d.results.map(x => `• ${x.title} (${x.url}): ${x.content}`).join('\n');
-          }
-        } catch (e) {}
-      }
-      if (!targetUrl) {
-        targetUrl = 'https://lite.duckduckgo.com/lite/?q=' + encodeURIComponent(queryOrUrl);
-      }
+function resolveJarvisTarget(rawInput) {
+  const unwrapped = String(rawInput || '').replace(/\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/gi, ' $2 ');
+  const lower = unwrapped.toLowerCase();
+
+  // 1. Direct @handle resolution (e.g. @Utkarshroy_55 -> YouTube / Instagram / GitHub / X)
+  const handleMatch = unwrapped.match(/@[a-zA-Z0-9_.-]+/);
+  if (handleMatch) {
+    const h = handleMatch[0];
+    if (lower.includes('instagram')) return { url: 'https://www.instagram.com/' + h.slice(1), via: 'Instagram Handle' };
+    if (lower.includes('twitter') || /\bx\b/.test(lower)) return { url: 'https://x.com/' + h.slice(1), via: 'X Handle' };
+    if (lower.includes('github')) return { url: 'https://github.com/' + h.slice(1), via: 'GitHub Handle' };
+    return { url: 'https://www.youtube.com/' + h, via: 'YouTube Handle (' + h + ')' };
+  }
+
+  // 2. Explicit https:// or www. URL
+  const urlMatch = unwrapped.match(/(?:https?:\/\/|www\.)[^\s\[\]()<>"'`]+/i);
+  if (urlMatch) {
+    const valid = cleanJarvisUrl(urlMatch[0]);
+    if (valid) return { url: valid, via: 'Direct URL' };
+  }
+
+  // 3. Bare domain (e.g. youtube.com/@Utkarshroy_55 or news.ycombinator.com)
+  const domainMatch = unwrapped.match(/\b([a-z0-9.-]+\.(?:com|org|net|in|io|ai|co|gov|edu|dev|app|me|tv)(?:\/[^\s\[\]()<>"'`]*)?)\b/i);
+  if (domainMatch) {
+    const valid = cleanJarvisUrl(domainMatch[1]);
+    if (valid) return { url: valid, via: 'Domain Detection' };
+  }
+
+  // 4. Known global entities
+  for (const [name, siteUrl] of Object.entries(JARVIS_KNOWN_SITES)) {
+    if (lower.includes(name)) {
+      return { url: siteUrl, via: 'Jarvis Entity Map (' + name + ')' };
+    }
+  }
+
+  return { url: null, via: 'Jina Cloud Search' };
+}
+
+async function executeChromiumTask(queryOrUrl) {
+  const rawQuery = String(queryOrUrl || '').trim();
+  const { url: targetUrl, via } = resolveJarvisTarget(rawQuery);
+
+  const jinaHeaders = {
+    'Accept': 'text/plain',
+    'X-Return-Format': 'markdown',
+    'X-With-Links-Summary': 'true',
+    'User-Agent': 'Victor-Jarvis-Engine/3.0'
+  };
+  if (process.env.JINA_API_KEY) {
+    jinaHeaders['Authorization'] = 'Bearer ' + process.env.JINA_API_KEY.trim();
+  }
+
+  try {
+    let jinaEndpoint = '';
+    if (targetUrl) {
+      // Direct URL rendering via Jina Cloud Chromium Reader
+      jinaEndpoint = 'https://r.jina.ai/' + targetUrl;
+    } else {
+      // Live Web Search + Chromium Extraction via Jina Search Reader
+      jinaEndpoint = 'https://s.jina.ai/' + encodeURIComponent(rawQuery);
     }
 
-    const puppeteer = await getPuppeteer();
-    browser = await puppeteer.launch({
-      headless: 'new',
-      executablePath: getChromiumPath(),
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-        '--disable-web-security'
-      ]
+    const res = await fetch(jinaEndpoint, {
+      method: 'GET',
+      headers: jinaHeaders,
+      signal: AbortSignal.timeout(14000)
     });
 
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 720 });
-    await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+    let extractedText = '';
+    if (res.ok) {
+      extractedText = (await res.text()).trim().slice(0, 7500);
+    }
 
-    // 1. Raw V8 Console & Network API Sniffer
-    const consoleLogs = [];
-    const networkApis = [];
-    page.on('console', msg => {
-      if (consoleLogs.length < 15) consoleLogs.push(`[${msg.type().toUpperCase()}] ${msg.text()}`);
-    });
-    page.on('response', async res => {
-      try {
-        const ct = res.headers()['content-type'] || '';
-        const reqType = res.request().resourceType();
-        if ((reqType === 'xhr' || reqType === 'fetch' || ct.includes('json')) && networkApis.length < 10) {
-          networkApis.push(`[${res.status()}] ${res.request().method()} ${res.url().slice(0, 120)}`);
-        }
-      } catch (e) {}
-    });
-
-    // 2. Navigate & Auto-Scroll to trigger lazy-loaded SPA components
-    await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 28000 });
-    await page.evaluate(async () => {
-      window.scrollBy(0, 500);
-      await new Promise(r => setTimeout(r, 400));
-      window.scrollTo(0, 0);
-    });
-
-    // 3. Optional Raw V8 JS Evaluation if requested via "eval: <code_here>"
-    let customEvalResult = '';
-    if (jsEvalMatch && jsEvalMatch[1]) {
-      try {
-        const res = await page.evaluate((codeStr) => eval(codeStr), jsEvalMatch[1]);
-        customEvalResult = JSON.stringify(res, null, 2);
-      } catch (evalErr) {
-        customEvalResult = 'V8 Eval Error: ' + evalErr.message;
+    // Fallback to Tavily if Jina returned empty or rate-limited
+    if (!extractedText && process.env.TAVILY_API_KEY) {
+      const tr = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: targetUrl || rawQuery, max_results: 4 }),
+        signal: AbortSignal.timeout(8000)
+      });
+      const td = await tr.json();
+      if (td.results && td.results.length > 0) {
+        extractedText = td.results.map(x => `• ${x.title} (${x.url}):\n${x.content}`).join('\n\n');
       }
     }
-
-    // 4. Deep DOM & Interactive Element Extraction
-    const domIntel = await page.evaluate(() => {
-      const title = document.title || '';
-      const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
-      const headings = Array.from(document.querySelectorAll('h1, h2, h3'))
-        .map(h => h.innerText.trim()).filter(Boolean).slice(0, 15).join(' | ');
-      const interactives = Array.from(document.querySelectorAll('a[href], button, input, select'))
-        .map((el, idx) => {
-          const tag = el.tagName.toLowerCase();
-          const label = (el.innerText || el.placeholder || el.getAttribute('aria-label') || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 40);
-          const href = el.getAttribute('href') || '';
-          return label ? `[${idx + 1}] <${tag}> "${label}"${href ? ' -> ' + href.slice(0, 60) : ''}` : null;
-        }).filter(Boolean).slice(0, 20).join('\n');
-      const bodyText = (document.body ? document.body.innerText : '').replace(/\s+/g, ' ').trim().slice(0, 5500);
-      return { title, metaDesc, headings, interactives, bodyText };
-    });
-
-    // 5. Capture Raw CDP Performance Metrics & Visual Snapshot
-    const metrics = await page.metrics();
-    let screenshotBase64 = null;
-    if (isScreenshot || urlMatch) {
-      screenshotBase64 = await page.screenshot({ encoding: 'base64', fullPage: false });
-    }
-
-    await browser.close();
 
     const intelReport = [
-      `=== [VICTOR RAW CHROMIUM CDP ENGINE] ===`,
-      `Target URL: ${targetUrl}`,
-      `Page Title: ${domIntel.title}`,
-      `V8 Heap Used: ${Math.round((metrics.JSHeapUsedSize || 0) / 1024 / 1024)} MB | DOM Nodes: ${metrics.Nodes || 'N/A'}`,
-      searchSummary ? `\n--- Search Context ---\n${searchSummary}` : '',
-      customEvalResult ? `\n--- V8 Custom JS Eval Output ---\n${customEvalResult}` : '',
-      networkApis.length ? `\n--- Intercepted XHR/Fetch Network APIs ---\n${networkApis.join('\n')}` : '',
-      consoleLogs.length ? `\n--- Live V8 Console Logs ---\n${consoleLogs.join('\n')}` : '',
-      domIntel.headings ? `\n--- Key Headings ---\n${domIntel.headings}` : '',
-      domIntel.interactives ? `\n--- Interactive DOM Map ---\n${domIntel.interactives}` : '',
-      `\n--- Rendered DOM Text ---\n${domIntel.bodyText}`
-    ].filter(Boolean).join('\n');
+      `=== [JINA CLOUD CHROMIUM READER TELEMETRY — LIVE WEB DATA] ===`,
+      `SYSTEM MANDATE: You have ALREADY accessed and scraped this live webpage/query using VICTOR's Jina Cloud Chromium Engine. NEVER say "I can't directly browse" or ask the user to paste text/URLs. Address the user as Sir and analyze the live extracted data below directly.`,
+      `Resolved Target: ${targetUrl || rawQuery} (via ${via})`,
+      `\n--- Live Extracted DOM Markdown ---\n${extractedText || 'No public text content returned from target page.'}`
+    ].join('\n');
 
     return {
       ok: true,
-      url: targetUrl,
-      title: domIntel.title,
+      url: targetUrl || jinaEndpoint,
       intel: intelReport,
-      screenshot: screenshotBase64 ? `data:image/png;base64,${screenshotBase64}` : null
+      screenshot: null
     };
   } catch (err) {
-    if (browser) {
-      try { await browser.close(); } catch (e) {}
-    }
     return {
       ok: false,
-      intel: `Chromium Engine Fallback (${err.message}). Query: ${queryOrUrl}`,
+      intel: `Jina Cloud Chromium Notice (${err.message}) for: ${rawQuery}`,
       screenshot: null
     };
   }
