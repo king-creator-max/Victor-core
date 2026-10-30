@@ -926,3 +926,12 @@ async function routeHybridChat(messages, requestedModel) {
 
 // Ensure Express parses JSON if not already present
 // (Handled natively)
+
+app.post('/api/verify', (req, res) => {
+  const { passkey } = req.body;
+  // Your private passkey check
+  if (passkey === (process.env.VICTOR_PASSKEY || 'jarvis123')) {
+    return res.json({ success: true });
+  }
+  res.status(401).json({ success: false, error: 'Unauthorized' });
+});
