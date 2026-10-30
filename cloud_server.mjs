@@ -1,3 +1,5 @@
+import express from 'express';
+const app = express();
 
 // === VICTOR MASTER CHROMIUM ENGINE ===
 const JARVIS_KNOWN_SITES = {
