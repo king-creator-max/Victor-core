@@ -128,7 +128,7 @@ async function executeChromiumTask(queryOrUrl) {
 
     const intelReport = [
       `=== [JINA CLOUD CHROMIUM READER TELEMETRY — LIVE WEB DATA] ===`,
-      `[SYSTEM MANDATE FOR VICTOR: You HAVE just searched and extracted the live web data below via your Jina Cloud Chromium Engine. Use this live telemetry to answer Sir directly. NEVER say you are unable to search or access the live web.]`,
+      `[SYSTEM MANDATE FOR VICTOR: You HAVE searched and extracted the live web data below via your Jina Cloud Chromium Engine. Use this live telemetry to answer Sir directly. NEVER say you are unable to search or access the live web.]`,
       `SYSTEM MANDATE: You have ALREADY accessed and scraped this live webpage/query using VICTOR's Jina Cloud Chromium Engine. NEVER say "I can't directly browse" or ask the user to paste text/URLs. Address the user as Sir and analyze the live extracted data below directly.`,
       `Resolved Target: ${targetUrl || rawQuery} (via ${via})`,
       `\n--- Live Extracted DOM Markdown ---\n${extractedText || 'No public text content returned from target page.'}`
@@ -205,7 +205,7 @@ fs.writeFileSync = function(file, data, options) {
 // ----------------------------------------------
 
 const MASTER_PASS = '@stark1082011';
-const PASS_B64 = Buffer.from(MASTER_PASS).toString('base64');
+const PASS_B64 = "QHN0YXJrMTA4MjAxMQ==";
 const CLOUD_TOPIC = 'victor_core_' + crypto.createHash('sha256').update(MASTER_PASS + '_COGNITIVE_CORE_V4').digest('hex').slice(0, 22);
 
 function encryptPayload(obj) {
@@ -529,7 +529,7 @@ const HTML_UI = `<!DOCTYPE html>
 
 const HTML_SCRIPT = `
   <script>
-    const MASTER_B64 = "${PASS_B64}";
+    const MASTER_B64 = "QHN0YXJrMTA4MjAxMQ==";
     const LOGO_MINI = ${JSON.stringify(VICTOR_LOGO_SVG)};
     let activeGroqKey = "${VAULT.gsk}" || localStorage.getItem('victor_groq_key') || '';
     let activeHfKey = "${VAULT.hf}" || localStorage.getItem('victor_hf_key') || '';
@@ -552,18 +552,24 @@ const HTML_SCRIPT = `
     };
 
     function unlockCore() {
-      const val = (document.getElementById('auth-input').value || '').trim();
-      const errEl = document.getElementById('lock-err');
-      let isCreator = false;
-      try { isCreator = (window.btoa(val) === MASTER_B64); } catch (e) {}
-      if (!isCreator && !val.startsWith('gsk_') && !val.startsWith('sk_')) {
-        errEl.innerText = 'Invalid passkey';
-        return;
-      }
-      document.getElementById('lock-screen').style.display = 'none';
-      document.getElementById('persona-box').value = memoryState.persona || '';
-      renderSavedHistory();
-    }
+            const inputEl = document.getElementById('auth-input');
+            const val = (inputEl ? inputEl.value : '').trim();
+            const errEl = document.getElementById('lock-err');
+            if (val !== '@stark1082011' && window.btoa(val) !== 'QHN0YXJrMTA4MjAxMQ==') {
+                if (errEl) errEl.innerText = 'Invalid passkey';
+                return;
+            }
+            if (errEl) errEl.innerText = '';
+            const lockScreen = document.getElementById('lock-screen');
+            if (lockScreen) lockScreen.style.display = 'none';
+            try {
+                const personaBox = document.getElementById('persona-box');
+                if (personaBox && typeof memoryState !== 'undefined' && memoryState && memoryState.persona) {
+                    personaBox.value = memoryState.persona;
+                }
+                if (typeof renderSavedHistory === 'function') renderSavedHistory();
+            } catch (e) {}
+        }
 
     function renderSavedHistory() {
       if (!memoryState.history || !memoryState.history.length) return;
@@ -832,6 +838,33 @@ const HTML_SCRIPT = `
       speakNeural(reply);
     }
   </script>
+
+<script>
+(function() {
+  function masterUnlock() {
+    var inp = document.getElementById('auth-input');
+    var err = document.getElementById('lock-err');
+    var val = (inp && inp.value ? inp.value : '').trim();
+    if (val === '@stark1082011') {
+      if (err) err.innerText = '';
+      var ls = document.getElementById('lock-screen');
+      if (ls) ls.style.display = 'none';
+      try { if (typeof renderSavedHistory === 'function') renderSavedHistory(); } catch(e) {}
+    } else {
+      if (err) err.innerText = 'Invalid passkey';
+    }
+  }
+  window.unlockCore = masterUnlock;
+  document.addEventListener('DOMContentLoaded', function() {
+    var btn = document.querySelector('.lock-btn');
+    var inp = document.getElementById('auth-input');
+    if (btn) btn.addEventListener('click', masterUnlock);
+    if (inp) inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') masterUnlock();
+    });
+  });
+})();
+</script>
 </body>
 </html>`;
 
@@ -899,6 +932,26 @@ http.createServer(async (req, res) => {
 
 // === VICTOR SAFE BACKEND HYBRID ROUTER ===
 async function routeHybridChat(messages, requestedModel) {
+  // JARVIS_PREFIX_INTERCEPTOR
+  let jarvisWebIntel = null;
+  try {
+    const lastUser = Array.isArray(messages) ? [...messages].reverse().find(m => m && m.role === 'user') : null;
+    const promptText = lastUser && typeof lastUser.content === 'string' ? lastUser.content.trim() : '';
+    if (/^(inspect|search|research)\b/i.test(promptText) && typeof executeChromiumTask === 'function') {
+      const resWeb = await executeChromiumTask(promptText);
+      if (resWeb && resWeb.intel) {
+        jarvisWebIntel = resWeb.intel;
+        messages = [
+          {
+            role: 'system',
+            content: 'You are VICTOR, an autonomous J.A.R.V.I.S.-class AI built for Sir. You have just retrieved live web data using your Jina Cloud Chromium Engine. Use the telemetry below to answer Sir directly and never claim you cannot browse the live web.\n\n' + jarvisWebIntel
+          },
+          ...messages
+        ];
+      }
+    }
+  } catch (e) {}
+
   const providers = [
     { name: "Groq", key: process.env.GROQ_API_KEY, url: "https://api.groq.com/openai/v1/chat/completions", model: requestedModel || "llama-3.3-70b-versatile" },
     { name: "Gemini", key: process.env.GEMINI_API_KEY, url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", model: "gemini-2.5-flash" },
