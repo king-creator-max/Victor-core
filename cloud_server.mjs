@@ -534,7 +534,8 @@ const HTML_SCRIPT = `
     let activeGroqKey = "${VAULT.gsk}" || localStorage.getItem('victor_groq_key') || '';
     let activeHfKey = "${VAULT.hf}" || localStorage.getItem('victor_hf_key') || '';
     let activeSkKey = "${VAULT.sk}" || localStorage.getItem('victor_sk_key') || '';
-    let memoryState = ${JSON.stringify(MEMORY)};
+    // SANITIZE_MEMORY_BOOT
+        let memoryState = ${JSON.stringify(MEMORY).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')};
     let currentMode = 'auto';
     let voiceOn = true;
     let wakeOn = false;
@@ -865,6 +866,30 @@ const HTML_SCRIPT = `
   });
 })();
 </script>
+
+<script>
+(function() {
+  try {
+    localStorage.removeItem('victor_history');
+    localStorage.removeItem('victor_chat_history');
+    if (typeof memoryState !== 'undefined' && memoryState) {
+      if (Array.isArray(memoryState.history)) {
+        memoryState.history = memoryState.history.filter(function(item) {
+          var txt = JSON.stringify(item || '');
+          return txt.indexOf('NEON//SYSTEM') === -1 && txt.indexOf('<!doctype html>') === -1;
+        });
+      }
+      if (Array.isArray(memoryState.chats)) {
+        memoryState.chats = memoryState.chats.filter(function(item) {
+          var txt = JSON.stringify(item || '');
+          return txt.indexOf('NEON//SYSTEM') === -1 && txt.indexOf('<!doctype html>') === -1;
+        });
+      }
+    }
+  } catch (e) {}
+})();
+</script>
+
 </body>
 </html>`;
 
