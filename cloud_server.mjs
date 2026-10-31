@@ -1,32 +1,4 @@
 
-// === VICTOR JARVIS ENTITY MAPPER ===
-const JARVIS_KNOWN_SITES = {
-  'hacker news': 'https://news.ycombinator.com',
-  'ycombinator': 'https://news.ycombinator.com',
-  'youtube': 'https://www.youtube.com',
-  'google': 'https://www.google.com',
-  'github': 'https://github.com',
-  'wikipedia': 'https://www.wikipedia.org',
-  'reddit': 'https://www.reddit.com',
-  'twitter': 'https://x.com',
-  'amazon': 'https://www.amazon.in',
-  'flipkart': 'https://www.flipkart.com',
-  'isro': 'https://www.isro.gov.in',
-  'nasa': 'https://www.nasa.gov'
-};
-
-async function resolveJarvisUrl(query) {
-  const lower = query.toLowerCase();
-  for (const [name, url] of Object.entries(JARVIS_KNOWN_SITES)) {
-    if (lower.includes(name)) return url;
-  }
-  const match = query.match(/https?:\/\/[^\s]+/i);
-  if (match) return match[0];
-  return 'https://lite.duckduckgo.com/lite/?q=' + encodeURIComponent(query);
-}
-// === END JARVIS MAPPER ===
-
-
 // === VICTOR MASTER CHROMIUM ENGINE ===
 const JARVIS_KNOWN_SITES = {
   'hacker news': 'https://news.ycombinator.com',
