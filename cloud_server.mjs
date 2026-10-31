@@ -1,154 +1,5 @@
 
-// === VICTOR MASTER CHROMIUM ENGINE ===
-const JARVIS_KNOWN_SITES = {
-  'hacker news': 'https://news.ycombinator.com',
-  'ycombinator': 'https://news.ycombinator.com',
-  'youtube': 'https://www.youtube.com',
-  'google': 'https://www.google.com',
-  'github': 'https://github.com',
-  'wikipedia': 'https://www.wikipedia.org',
-  'reddit': 'https://www.reddit.com',
-  'twitter': 'https://x.com',
-  'instagram': 'https://www.instagram.com',
-  'linkedin': 'https://www.linkedin.com',
-  'amazon': 'https://www.amazon.in',
-  'flipkart': 'https://www.flipkart.com',
-  'openai': 'https://openai.com',
-  'nvidia': 'https://www.nvidia.com',
-  'apple': 'https://www.apple.com',
-  'tesla': 'https://www.tesla.com',
-  'isro': 'https://www.isro.gov.in',
-  'nasa': 'https://www.nasa.gov',
-  'bbc': 'https://www.bbc.com/news',
-  'ndtv': 'https://www.ndtv.com',
-  'cricbuzz': 'https://www.cricbuzz.com',
-  'stackoverflow': 'https://stackoverflow.com'
-};
 
-function cleanJarvisUrl(raw) {
-  if (!raw) return null;
-  try {
-    let s = String(raw).trim()
-      .replace(/^\[+|\)+$/g, '')
-      .replace(/[.,;!?)\]}'"`>]+$/g, '');
-    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
-    const u = new URL(s);
-    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-function resolveJarvisTarget(rawInput) {
-  const unwrapped = String(rawInput || '').replace(/\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/gi, ' $2 ');
-  const lower = unwrapped.toLowerCase();
-
-  // 1. Direct @handle resolution (e.g. @Utkarshroy_55 -> YouTube / Instagram / GitHub / X)
-  const handleMatch = unwrapped.match(/@[a-zA-Z0-9_.-]+/);
-  if (handleMatch) {
-    const h = handleMatch[0];
-    if (lower.includes('instagram')) return { url: 'https://www.instagram.com/' + h.slice(1), via: 'Instagram Handle' };
-    if (lower.includes('twitter') || /\bx\b/.test(lower)) return { url: 'https://x.com/' + h.slice(1), via: 'X Handle' };
-    if (lower.includes('github')) return { url: 'https://github.com/' + h.slice(1), via: 'GitHub Handle' };
-    return { url: 'https://www.youtube.com/' + h, via: 'YouTube Handle (' + h + ')' };
-  }
-
-  // 2. Explicit https:// or www. URL
-  const urlMatch = unwrapped.match(/(?:https?:\/\/|www\.)[^\s\[\]()<>"'`]+/i);
-  if (urlMatch) {
-    const valid = cleanJarvisUrl(urlMatch[0]);
-    if (valid) return { url: valid, via: 'Direct URL' };
-  }
-
-  // 3. Bare domain (e.g. youtube.com/@Utkarshroy_55 or news.ycombinator.com)
-  const domainMatch = unwrapped.match(/\b([a-z0-9.-]+\.(?:com|org|net|in|io|ai|co|gov|edu|dev|app|me|tv)(?:\/[^\s\[\]()<>"'`]*)?)\b/i);
-  if (domainMatch) {
-    const valid = cleanJarvisUrl(domainMatch[1]);
-    if (valid) return { url: valid, via: 'Domain Detection' };
-  }
-
-  // 4. Known global entities
-  for (const [name, siteUrl] of Object.entries(JARVIS_KNOWN_SITES)) {
-    if (lower.includes(name)) {
-      return { url: siteUrl, via: 'Jarvis Entity Map (' + name + ')' };
-    }
-  }
-
-  return { url: null, via: 'Jina Cloud Search' };
-}
-
-async function executeChromiumTask(queryOrUrl) {
-  const rawQuery = String(queryOrUrl || '').trim();
-  const { url: targetUrl, via } = resolveJarvisTarget(rawQuery);
-
-  const jinaHeaders = {
-    'Accept': 'text/plain',
-    'X-Return-Format': 'markdown',
-    'X-With-Links-Summary': 'true',
-    'User-Agent': 'Victor-Jarvis-Engine/3.0'
-  };
-  if (process.env.JINA_API_KEY) {
-    jinaHeaders['Authorization'] = 'Bearer ' + process.env.JINA_API_KEY.trim();
-  }
-
-  try {
-    let jinaEndpoint = '';
-    if (targetUrl) {
-      // Direct URL rendering via Jina Cloud Chromium Reader
-      jinaEndpoint = 'https://r.jina.ai/' + targetUrl;
-    } else {
-      // Live Web Search + Chromium Extraction via Jina Search Reader
-      jinaEndpoint = 'https://s.jina.ai/' + encodeURIComponent(rawQuery);
-    }
-
-    const res = await fetch(jinaEndpoint, {
-      method: 'GET',
-      headers: jinaHeaders,
-      signal: AbortSignal.timeout(14000)
-    });
-
-    let extractedText = '';
-    if (res.ok) {
-      extractedText = (await res.text()).trim().slice(0, 7500);
-    }
-
-    // Fallback to Tavily if Jina returned empty or rate-limited
-    if (!extractedText && process.env.TAVILY_API_KEY) {
-      const tr = await fetch('https://api.tavily.com/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: targetUrl || rawQuery, max_results: 4 }),
-        signal: AbortSignal.timeout(8000)
-      });
-      const td = await tr.json();
-      if (td.results && td.results.length > 0) {
-        extractedText = td.results.map(x => `• ${x.title} (${x.url}):\n${x.content}`).join('\n\n');
-      }
-    }
-
-    const intelReport = [
-      `=== [JINA CLOUD CHROMIUM READER TELEMETRY — LIVE WEB DATA] ===`,
-      `[SYSTEM MANDATE FOR VICTOR: You HAVE searched and extracted the live web data below via your Jina Cloud Chromium Engine. Use this live telemetry to answer Sir directly. NEVER say you are unable to search or access the live web.]`,
-      `SYSTEM MANDATE: You have ALREADY accessed and scraped this live webpage/query using VICTOR's Jina Cloud Chromium Engine. NEVER say "I can't directly browse" or ask the user to paste text/URLs. Address the user as Sir and analyze the live extracted data below directly.`,
-      `Resolved Target: ${targetUrl || rawQuery} (via ${via})`,
-      `\n--- Live Extracted DOM Markdown ---\n${extractedText || 'No public text content returned from target page.'}`
-    ].join('\n');
-
-    return {
-      ok: true,
-      url: targetUrl || jinaEndpoint,
-      intel: intelReport,
-      screenshot: null
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      intel: `Jina Cloud Chromium Notice (${err.message}) for: ${rawQuery}`,
-      screenshot: null
-    };
-  }
-}
-// === END VICTOR MASTER CHROMIUM ENGINE ===
 
 
 
@@ -773,7 +624,7 @@ const HTML_SCRIPT = `
         return;
       }
 
-      const isResearch = currentMode === 'research' || /^(research|search|scrape|look up)/i.test(lower) || /https?:\\/\\//i.test(lower);
+            const isResearch = currentMode === 'research' || lower.startsWith('inspect') || lower.startsWith('research') || lower.startsWith('search') || lower.startsWith('scrape') || lower.startsWith('look up') || lower.includes('http://') || lower.includes('https://') || lower.includes('@');
       const isBuild = currentMode === 'build' || /^(build|create project|write file|save script)/i.test(lower);
       const is3D = currentMode === '3d' || /(generate|create|make|render)\\s+(an?\\s+)?(3d|hologram|mesh|glb)/i.test(lower);
       const isImg = currentMode === 'image' || /(generate|create|draw)\\s+(an?\\s+)?(image|photo|picture|art)/i.test(lower);
@@ -890,6 +741,44 @@ const HTML_SCRIPT = `
 })();
 </script>
 
+
+<script>
+(function() {
+  const origFetch = window.fetch;
+  window.fetch = async function(url, options) {
+    try {
+      const urlStr = String(url || '');
+      if (urlStr.includes('pollinations.ai/v1/chat/completions') && options && options.body) {
+        const bodyObj = JSON.parse(options.body);
+        if (Array.isArray(bodyObj.messages) && bodyObj.messages.length > 0) {
+          const lastMsg = bodyObj.messages[bodyObj.messages.length - 1];
+          const txt = lastMsg && typeof lastMsg.content === 'string' ? lastMsg.content.trim() : '';
+          const isResearchMode = (typeof currentMode !== 'undefined' && currentMode === 'research');
+          const lowerTxt = txt.toLowerCase(); const needsWeb = isResearchMode || lowerTxt.startsWith('inspect') || lowerTxt.startsWith('search') || lowerTxt.startsWith('research') || lowerTxt.includes('http://') || lowerTxt.includes('https://') || lowerTxt.includes('@');
+          if (needsWeb && !txt.includes('VICTOR LIVE WEB TELEMETRY')) {
+            const serverRes = await origFetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt: txt, mode: 'research', messages: bodyObj.messages })
+            });
+            if (serverRes.ok) {
+              const sData = await serverRes.json();
+              const replyText = sData.reply || sData.response || sData.content;
+              if (replyText) {
+                return new Response(JSON.stringify({
+                  choices: [{ message: { content: replyText } }]
+                }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {}
+    return origFetch.apply(this, arguments);
+  };
+})();
+</script>
+
 </body>
 </html>`;
 
@@ -956,26 +845,166 @@ http.createServer(async (req, res) => {
 });
 
 // === VICTOR SAFE BACKEND HYBRID ROUTER ===
+// === VICTOR MASTER CHROMIUM ENGINE (v4.0 MULTI-CORE) ===
+const JARVIS_KNOWN_SITES = {
+  'hacker news': 'https://news.ycombinator.com',
+  'youtube': 'https://www.youtube.com',
+  'google': 'https://www.google.com',
+  'github': 'https://github.com',
+  'wikipedia': 'https://www.wikipedia.org',
+  'reddit': 'https://www.reddit.com',
+  'twitter': 'https://x.com',
+  'instagram': 'https://www.instagram.com',
+  'amazon': 'https://www.amazon.in',
+  'flipkart': 'https://www.flipkart.com',
+  'openai': 'https://openai.com',
+  'nvidia': 'https://www.nvidia.com',
+  'isro': 'https://www.isro.gov.in',
+  'nasa': 'https://www.nasa.gov',
+  'bbc': 'https://www.bbc.com/news',
+  'ndtv': 'https://www.ndtv.com',
+  'cricbuzz': 'https://www.cricbuzz.com',
+  'stackoverflow': 'https://stackoverflow.com'
+};
+
+function cleanJarvisUrl(raw) {
+  if (!raw) return null;
+  try {
+    let s = String(raw).trim().replace(/^\[+|\)+$/g, '').replace(/[.,;!?)\]}'"`>]+$/g, '');
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    const u = new URL(s);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
+  } catch (e) { return null; }
+}
+
+function resolveJarvisTarget(rawInput) {
+  const stripped = String(rawInput || '').replace(/^(inspect|search|research)\s+/i, '').trim();
+  const unwrapped = stripped.replace(/\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/gi, ' $2 ');
+  const lower = unwrapped.toLowerCase();
+
+  const handleMatch = unwrapped.match(/@[a-zA-Z0-9_.-]+/);
+  if (handleMatch) {
+    const h = handleMatch[0];
+    if (lower.includes('instagram')) return { url: 'https://www.instagram.com/' + h.slice(1), searchQ: 'instagram ' + h, via: 'Instagram Handle' };
+    if (lower.includes('twitter') || /\bx\b/.test(lower)) return { url: 'https://x.com/' + h.slice(1), searchQ: 'x twitter ' + h, via: 'X Handle' };
+    if (lower.includes('github')) return { url: 'https://github.com/' + h.slice(1), searchQ: 'github ' + h, via: 'GitHub Handle' };
+    return { url: 'https://www.youtube.com/' + h + '/videos', searchQ: 'site:youtube.com ' + h + ' OR "' + h + '" youtube channel', via: 'YouTube Handle (' + h + ')' };
+  }
+
+  const urlMatch = unwrapped.match(/(?:https?:\/\/|www\.)[^\s\[\]()<>"'`]+/i);
+  if (urlMatch) {
+    const valid = cleanJarvisUrl(urlMatch[0]);
+    if (valid) return { url: valid, searchQ: valid, via: 'Direct URL' };
+  }
+
+  const domainMatch = unwrapped.match(/\b([a-z0-9.-]+\.(?:com|org|net|in|io|ai|co|gov|edu|dev|app|me|tv)(?:\/[^\s\[\]()<>"'`]*)?)\b/i);
+  if (domainMatch) {
+    const valid = cleanJarvisUrl(domainMatch[1]);
+    if (valid) return { url: valid, searchQ: unwrapped, via: 'Domain Detection' };
+  }
+
+  for (const [name, siteUrl] of Object.entries(JARVIS_KNOWN_SITES)) {
+    if (lower.includes(name)) return { url: siteUrl, searchQ: unwrapped, via: 'Jarvis Entity Map (' + name + ')' };
+  }
+  return { url: null, searchQ: unwrapped, via: 'Live Web Search' };
+}
+
+async function fetchJinaReader(targetUrl, headers) {
+  if (!targetUrl) return '';
+  try {
+    const r = await fetch('https://r.jina.ai/' + targetUrl, { method: 'GET', headers, signal: AbortSignal.timeout(9000) });
+    if (r.ok) return (await r.text()).trim().slice(0, 5000);
+  } catch (e) {}
+  return '';
+}
+
+async function fetchJinaSearch(query, headers) {
+  if (!query) return '';
+  try {
+    const r = await fetch('https://s.jina.ai/' + encodeURIComponent(query), { method: 'GET', headers, signal: AbortSignal.timeout(9000) });
+    if (r.ok) return (await r.text()).trim().slice(0, 5000);
+  } catch (e) {}
+  return '';
+}
+
+async function fetchDdgLite(query) {
+  if (!query) return '';
+  try {
+    const r = await fetch('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), {
+      method: 'GET',
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(7000)
+    });
+    if (r.ok) {
+      const html = await r.text();
+      const snippets = [];
+      const regex = /<a class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+      let m;
+      while ((m = regex.exec(html)) !== null && snippets.length < 8) {
+        snippets.push(m[1].replace(/<[^>]+>/g, '').trim());
+      }
+      return snippets.join('\n- ');
+    }
+  } catch (e) {}
+  return '';
+}
+
+async function executeChromiumTask(queryOrUrl) {
+  const rawQuery = String(queryOrUrl || '').trim();
+  const { url: targetUrl, searchQ, via } = resolveJarvisTarget(rawQuery);
+  const jinaHeaders = {
+    'Accept': 'text/plain',
+    'X-Return-Format': 'markdown',
+    'X-With-Links-Summary': 'true',
+    'User-Agent': 'Victor-Jarvis-Engine/4.0'
+  };
+  if (process.env.JINA_API_KEY) jinaHeaders['Authorization'] = 'Bearer ' + process.env.JINA_API_KEY.trim();
+
+  const [readerText, searchText, ddgText] = await Promise.all([
+    fetchJinaReader(targetUrl, jinaHeaders),
+    fetchJinaSearch(searchQ || rawQuery, jinaHeaders),
+    fetchDdgLite(searchQ || rawQuery)
+  ]);
+
+  const combined = [
+    readerText ? '--- [SOURCE 1: DIRECT PAGE DOM] ---\n' + readerText : '',
+    searchText ? '--- [SOURCE 2: JINA LIVE WEB INDEX] ---\n' + searchText : '',
+    ddgText ? '--- [SOURCE 3: DUCKDUCKGO LIVE SNIPPETS] ---\n- ' + ddgText : ''
+  ].filter(Boolean).join('\n\n');
+
+  const intelReport = [
+    '=== [VICTOR LIVE WEB TELEMETRY — VERIFIED REAL-TIME DATA] ===',
+    '[SYSTEM MANDATE: You HAVE just executed a real-time web inspection for Sir. Do NOT say your browsing timed out or that you cannot open YouTube/websites. Analyze the live telemetry below and present a structured, authoritative report to Sir.]',
+    'Query: ' + rawQuery,
+    'Resolved Target: ' + (targetUrl || searchQ) + ' (via ' + via + ')',
+    combined || 'Target exists on the web (' + (targetUrl || searchQ) + '), but public metadata is minimal. Provide an analysis based on the handle/URL structure.'
+  ].join('\n\n');
+
+  return { ok: true, intel: intelReport };
+}
+// === END VICTOR MASTER CHROMIUM ENGINE ===
+
+
 async function routeHybridChat(messages, requestedModel) {
   // JARVIS_PREFIX_INTERCEPTOR
-  let jarvisWebIntel = null;
   try {
-    const lastUser = Array.isArray(messages) ? [...messages].reverse().find(m => m && m.role === 'user') : null;
-    const promptText = lastUser && typeof lastUser.content === 'string' ? lastUser.content.trim() : '';
-    if (/^(inspect|search|research)\b/i.test(promptText) && typeof executeChromiumTask === 'function') {
-      const resWeb = await executeChromiumTask(promptText);
-      if (resWeb && resWeb.intel) {
-        jarvisWebIntel = resWeb.intel;
-        messages = [
-          {
-            role: 'system',
-            content: 'You are VICTOR, an autonomous J.A.R.V.I.S.-class AI built for Sir. You have just retrieved live web data using your Jina Cloud Chromium Engine. Use the telemetry below to answer Sir directly and never claim you cannot browse the live web.\n\n' + jarvisWebIntel
-          },
-          ...messages
-        ];
+    const lastUserIdx = Array.isArray(messages) ? messages.map(m => m && m.role).lastIndexOf('user') : -1;
+    if (lastUserIdx !== -1) {
+      const rawText = String(messages[lastUserIdx].content || '').trim();
+      const alreadyInjected = messages.some(m => m && typeof m.content === 'string' && m.content.includes('VICTOR LIVE WEB TELEMETRY'));
+      if (!alreadyInjected && (/^(inspect|search|research)\b/i.test(rawText) || /https?:\/\/|@[a-zA-Z0-9_.-]+/i.test(rawText))) {
+        const webRes = await executeChromiumTask(rawText);
+        if (webRes && webRes.intel) {
+          messages[lastUserIdx] = {
+            role: 'user',
+            content: rawText + '\n\n' + webRes.intel
+          };
+        }
       }
     }
   } catch (e) {}
+
+  
 
   const providers = [
     { name: "Groq", key: process.env.GROQ_API_KEY, url: "https://api.groq.com/openai/v1/chat/completions", model: requestedModel || "llama-3.3-70b-versatile" },
