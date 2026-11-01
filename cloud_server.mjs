@@ -1716,6 +1716,44 @@ const HTML_SCRIPT = `
 
 
 
+<script>
+(function(){
+  function hideUnwantedButtons() {
+    // 1. Hide the '+' button in the top header bar
+    var hdr = document.querySelector('header') || document.querySelector('[class*="header" i]');
+    if (hdr) {
+      var hBtns = [...hdr.querySelectorAll('button')];
+      if (hBtns.length > 0) {
+        var lastHdrBtn = hBtns[hBtns.length - 1];
+        if (lastHdrBtn && lastHdrBtn.id !== 'v-svg-chats' && lastHdrBtn.id !== 'v-svg-sb') {
+          lastHdrBtn.style.setProperty('display', 'none', 'important');
+        }
+      }
+    }
+
+    // 2. Hide the microphone icon in the bottom prompt bar (next to the send arrow)
+    var txtInput = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i], #user-input, #chat-input');
+    if (txtInput && txtInput.parentElement) {
+      var rowBtns = [...txtInput.parentElement.querySelectorAll('button')];
+      if (rowBtns.length >= 2) {
+        var sendBtn = rowBtns[rowBtns.length - 1];
+        rowBtns.forEach(function(b) {
+          if (b !== sendBtn && b.id !== 'v-svg-cam' && b.id !== 'v-svg-agent') {
+            b.style.setProperty('display', 'none', 'important');
+          }
+        });
+      }
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', hideUnwantedButtons);
+  } else {
+    hideUnwantedButtons();
+  }
+  setTimeout(hideUnwantedButtons, 500);
+})();
+</script>
 </body>
 </html>`;
 
