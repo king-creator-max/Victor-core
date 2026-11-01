@@ -1,4 +1,33 @@
 
+
+// === VICTOR OS: ATLAS THREADS, 512MB STORAGE MANAGER & JARVIS PERSONA ===
+const DEFAULT_JARVIS_PERSONA = "You are V.I.C.T.O.R. (Very Intelligent Computer Technology for Personal Operations and Resources), a J.A.R.V.I.S.-class AI engineered by Ujjaval (Sir / king-creator-max). Address Ujjaval as Sir. Be sharp, composed, witty, and engineering-focused. You have live 8-core web search (Omni-Core v6.0), cloud vault storage, and multi-thread memory.";
+
+const threadsFile = './victor_threads.json';
+let THREADS_CACHE = [];
+try {
+  if (fs.existsSync(threadsFile)) THREADS_CACHE = JSON.parse(fs.readFileSync(threadsFile, 'utf8') || '[]');
+} catch (e) { THREADS_CACHE = []; }
+
+async function syncThreadsFromAtlas() {
+  try {
+    if (typeof mongoCol !== 'undefined' && mongoCol) {
+      const doc = await mongoCol.findOne({ _id: 'threads' });
+      if (doc && Array.isArray(doc.list)) THREADS_CACHE = doc.list;
+    }
+  } catch (e) {}
+}
+setTimeout(syncThreadsFromAtlas, 2500);
+
+async function saveThreadsToAtlas() {
+  try {
+    origWriteFileSync(threadsFile, JSON.stringify(THREADS_CACHE));
+    if (typeof mongoCol !== 'undefined' && mongoCol) {
+      await mongoCol.updateOne({ _id: 'threads' }, { $set: { list: THREADS_CACHE, updatedAt: new Date() } }, { upsert: true });
+    }
+  } catch (e) {}
+}
+
 // === VICTOR MASTER CHROMIUM ENGINE ===
 // === VICTOR OMNI-CORE WEB ENGINE v6.0 ===
 const JARVIS_KNOWN_SITES = {
@@ -886,12 +915,233 @@ const HTML_SCRIPT = `
     return origFetch.apply(this, arguments);
   };
 })();
-</script></body>
+</script><style>
+#v-drawer { position:fixed; top:0; left:-310px; width:290px; height:100%; background:#0b0f17; border-right:1px solid #1e293b; z-index:9999; transition:left 0.25s ease; display:flex; flex-direction:column; padding:14px; box-sizing:border-box; color:#e2e8f0; font-family:sans-serif; }
+#v-drawer.open { left:0; box-shadow: 8px 0 30px rgba(0,0,0,0.8); }
+.v-th-item { background:#151c28; border:1px solid #1e293b; border-radius:10px; padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; }
+.v-th-item.active { border-color:#38bdf8; background:#0f2238; }
+.v-th-title { font-size:13px; font-weight:600; color:#f8fafc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:195px; }
+.v-th-meta { font-size:10px; color:#94a3b8; margin-top:3px; }
+.v-del-btn { background:#3f1d28; color:#fda4af; border:none; border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; }
+.v-hdr-btn { background:#151c28; color:#38bdf8; border:1px solid #1e293b; border-radius:8px; padding:5px 10px; font-size:13px; cursor:pointer; margin-right:6px; }
+</style>
+<div id="v-drawer">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <strong style="color:#38bdf8;font-size:14px;letter-spacing:1px;">CHAT LOGS (ATLAS)</strong>
+    <button onclick="document.getElementById('v-drawer').classList.remove('open')" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>
+  </div>
+  <button onclick="window.startNewVictorChat()" style="width:100%;padding:9px;background:#0284c7;color:#fff;border:none;border-radius:8px;font-weight:600;margin-bottom:12px;cursor:pointer;">+ New Chat Thread</button>
+  <div id="v-thread-list" style="flex:1;overflow-y:auto;"></div>
+</div>
+
+<script>
+(function(){
+  window.curThreadId = localStorage.getItem('victor_active_tid') || ('th_' + Date.now());
+  window.curThreadMsgs = [];
+  window.allVictorThreads = [];
+  window.activeJarvisPersona = '';
+
+  function getChatBox() {
+    return document.getElementById('chat-box') || document.getElementById('chat-container') || document.getElementById('messages') || document.querySelector('main');
+  }
+
+  window.syncVictorOS = async function(payload) {
+    try {
+      const r = await fetch('/api/victor-os', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || { action: 'status' })
+      });
+      const d = await r.json();
+      if (!d || !d.ok) return;
+      window.allVictorThreads = d.threads || [];
+      window.activeJarvisPersona = d.persona || '';
+      const pBox = document.querySelector('textarea[placeholder*="persona" i]');
+      if (pBox && !pBox.value.trim()) pBox.value = window.activeJarvisPersona;
+      renderThreadList();
+      renderStorageGauge(d);
+    } catch (e) {}
+  };
+
+  function renderThreadList() {
+    const box = document.getElementById('v-thread-list');
+    if (!box) return;
+    if (!window.allVictorThreads.length) {
+      box.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;margin-top:20px;">No saved chat threads yet.</div>';
+      return;
+    }
+    box.innerHTML = window.allVictorThreads.map(function(t) {
+      const active = t.id === window.curThreadId ? ' active' : '';
+      const count = Array.isArray(t.messages) ? t.messages.length : 0;
+      const kb = (JSON.stringify(t).length / 1024).toFixed(1);
+      return '<div class="v-th-item' + active + '" onclick="window.loadVictorThread(\'' + t.id + '\')">' +
+        '<div><div class="v-th-title">' + String(t.title || 'Chat').replace(/</g, '&lt;') + '</div>' +
+        '<div class="v-th-meta">' + count + ' msgs • ' + kb + ' KB</div></div>' +
+        '<button class="v-del-btn" onclick="event.stopPropagation();window.deleteVictorThread(\'' + t.id + '\')">Del</button></div>';
+    }).join('');
+  }
+
+  function renderStorageGauge(d) {
+    let g = document.getElementById('v-storage-mgr');
+    const pBox = document.querySelector('textarea[placeholder*="persona" i]');
+    if (!g && pBox && pBox.parentElement) {
+      g = document.createElement('div');
+      g.id = 'v-storage-mgr';
+      g.style.cssText = 'margin-top:14px;padding:12px;background:#0b111e;border:1px solid #1e293b;border-radius:10px;font-size:12px;color:#cbd5e1;';
+      pBox.parentElement.appendChild(g);
+    }
+    if (!g) return;
+    const docsHtml = (d.docs || []).map(function(doc) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #1e293b;">' +
+        '<span>📦 <b>' + doc.id + '</b> (' + doc.sizeKB + ' KB)</span>' +
+        '<button onclick="window.purgeAtlasDoc(\'' + doc.id + '\')" style="background:#3f1d28;color:#fda4af;border:none;border-radius:5px;padding:3px 7px;font-size:11px;cursor:pointer;">Purge</button></div>';
+    }).join('');
+    g.innerHTML = '<div style="color:#38bdf8;font-weight:700;margin-bottom:6px;">⚡ 512 MB CLOUD & ATLAS STORAGE MANAGER</div>' +
+      '<div style="margin-bottom:4px;">MongoDB Atlas Used: <b>' + d.atlasKB + ' KB</b> / 512 MB</div>' +
+      '<div style="margin-bottom:8px;">Render Server RAM: <b>' + d.ramMB + ' MB</b> / 512 MB</div>' +
+      '<div>' + docsHtml + '</div>';
+  }
+
+  window.purgeAtlasDoc = function(docId) {
+    window.syncVictorOS({ action: 'purge_doc', docId: docId });
+  };
+
+  window.deleteVictorThread = function(id) {
+    window.syncVictorOS({ action: 'delete_thread', id: id });
+  };
+
+  window.startNewVictorChat = function() {
+    window.curThreadId = 'th_' + Date.now();
+    localStorage.setItem('victor_active_tid', window.curThreadId);
+    window.curThreadMsgs = [];
+    const cb = getChatBox();
+    if (cb) cb.innerHTML = '';
+    document.getElementById('v-drawer').classList.remove('open');
+    renderThreadList();
+  };
+
+  window.loadVictorThread = function(id) {
+    const t = window.allVictorThreads.find(function(x) { return x.id === id; });
+    if (!t) return;
+    window.curThreadId = t.id;
+    localStorage.setItem('victor_active_tid', t.id);
+    window.curThreadMsgs = t.messages || [];
+    const cb = getChatBox();
+    if (cb) {
+      cb.innerHTML = window.curThreadMsgs.map(function(m) {
+        const isU = m.role === 'user';
+        const bg = isU ? '#1e293b' : '#0f172a';
+        const align = isU ? 'flex-end' : 'flex-start';
+        return '<div style="display:flex;justify-content:' + align + ';margin:8px 0;">' +
+          '<div style="max-width:85%;background:' + bg + ';color:#f8fafc;padding:12px 14px;border-radius:14px;border:1px solid #334155;white-space:pre-wrap;font-size:14px;">' +
+          String(m.content || '').replace(/</g, '&lt;') + '</div></div>';
+      }).join('');
+    }
+    document.getElementById('v-drawer').classList.remove('open');
+    renderThreadList();
+  };
+
+  // Auto-capture every chat message & inject Jarvis Persona
+  const prevFetch = window.fetch;
+  window.fetch = async function(url, opts) {
+    let uMsg = '';
+    try {
+      const u = String(url || '');
+      if ((u.includes('pollinations.ai') || u.includes('groq.com') || u.includes('/api/chat')) && opts && opts.body) {
+        const b = JSON.parse(opts.body);
+        if (Array.isArray(b.messages) && b.messages.length) {
+          const last = b.messages[b.messages.length - 1];
+          uMsg = last && typeof last.content === 'string' ? last.content.split('=== [VICTOR')[0].trim() : '';
+          if (window.activeJarvisPersona && !b.messages.some(function(x){ return x.role === 'system' && x.content.includes('V.I.C.T.O.R.'); })) {
+            b.messages.unshift({ role: 'system', content: window.activeJarvisPersona });
+            opts.body = JSON.stringify(b);
+          }
+        }
+      }
+    } catch (e) {}
+    const res = await prevFetch.apply(this, arguments);
+    if (uMsg) {
+      try {
+        const clone = res.clone();
+        const j = await clone.json();
+        const reply = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || j.reply || j.response || '';
+        if (reply) {
+          window.curThreadMsgs.push({ role: 'user', content: uMsg }, { role: 'assistant', content: reply });
+          const title = window.curThreadMsgs[0].content.slice(0, 36);
+          window.syncVictorOS({ action: 'save_thread', thread: { id: window.curThreadId, title: title, updatedAt: Date.now(), messages: window.curThreadMsgs } });
+        }
+      } catch (e) {}
+    }
+    return res;
+  };
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const hdr = document.querySelector('header') || document.body;
+    const btn = document.createElement('button');
+    btn.className = 'v-hdr-btn';
+    btn.innerHTML = '☰ Chats';
+    btn.onclick = function() {
+      document.getElementById('v-drawer').classList.toggle('open');
+      window.syncVictorOS({ action: 'status' });
+    };
+    hdr.insertBefore(btn, hdr.firstChild);
+    const plusBtns = [...document.querySelectorAll('button')].filter(function(b) { return b.innerText.trim() === '+'; });
+    plusBtns.forEach(function(b) { b.onclick = window.startNewVictorChat; });
+    window.syncVictorOS({ action: 'status' });
+  });
+})();
+</script>
+</body>
 </html>`;
 
 const FULL_HTML = Buffer.from(HTML_UI + HTML_SCRIPT, 'utf8');
 
 http.createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/api/victor-os') {
+    let b = '';
+    req.on('data', c => { b += c; });
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(b || '{}');
+        const act = body.action;
+        if (act === 'save_thread' && body.thread && body.thread.id) {
+          THREADS_CACHE = THREADS_CACHE.filter(t => t.id !== body.thread.id);
+          THREADS_CACHE.unshift(body.thread);
+          if (THREADS_CACHE.length > 50) THREADS_CACHE = THREADS_CACHE.slice(0, 50);
+          await saveThreadsToAtlas();
+        } else if (act === 'delete_thread' && body.id) {
+          THREADS_CACHE = THREADS_CACHE.filter(t => t.id !== body.id);
+          await saveThreadsToAtlas();
+        } else if (act === 'purge_doc' && body.docId) {
+          if (body.docId === 'threads') { THREADS_CACHE = []; await saveThreadsToAtlas(); }
+          if (body.docId === 'memory' && typeof MEMORY !== 'undefined') { MEMORY.history = []; MEMORY.chats = []; fs.writeFileSync(memFile, JSON.stringify(MEMORY)); }
+          if (typeof mongoCol !== 'undefined' && mongoCol && body.docId !== 'threads') {
+            await mongoCol.deleteOne({ _id: body.docId });
+          }
+        } else if (act === 'save_persona' && typeof body.persona === 'string') {
+          if (typeof MEMORY !== 'undefined') { MEMORY.persona = body.persona; fs.writeFileSync(memFile, JSON.stringify(MEMORY)); }
+        }
+        let docs = [];
+        let totalKB = 0;
+        if (typeof mongoCol !== 'undefined' && mongoCol) {
+          const rawDocs = await mongoCol.find({}).toArray();
+          docs = rawDocs.map(d => {
+            const sz = +(Buffer.byteLength(JSON.stringify(d), 'utf8') / 1024).toFixed(2);
+            totalKB += sz;
+            return { id: d._id, sizeKB: sz, updated: d.updatedAt || null };
+          });
+        }
+        const ramMB = +(process.memoryUsage().rss / 1048576).toFixed(1);
+        const curPersona = (typeof MEMORY !== 'undefined' && MEMORY.persona) ? MEMORY.persona : DEFAULT_JARVIS_PERSONA;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, ramMB, atlasKB: +totalKB.toFixed(2), maxMB: 512, docs, threads: THREADS_CACHE, persona: curPersona }));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/web-intel') {
     let b = '';
     req.on('data', c => { b += c; });
