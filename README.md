@@ -1,13 +1,11 @@
-# Victor Core 🚀
+# Hi there, I'm Ujjaval 👋 (king-creator-max)
 
-> **Created and Developed by Ujjaval** ([@king-creator-max](https://github.com/king-creator-max))
+I am an independent software developer, hardware tinkerer, and AI systems architect based in Begusarai, India. I specialize in building mobile-first AI tools, developer utilities, and cloud workspaces.
 
-**Victor Core** (also known as Victor AI) is a custom-engineered multi-modal web workspace and personal AI operating environment built from the ground up by independent developer **Ujjaval** (operating under the developer handle **king-creator-max**). 
+### 🚀 Flagship Projects
+* **Victor Core / Victor AI:** An advanced multi-modal cloud-accessible web workspace and personal AI operating environment.
+* **victor-ai-ujjaval:** A global command-line AI assistant NPM package deployable across mobile environments via Node.js and Termux.
 
----
-
-### 🛡️ Ownership & Authorship Notice
-* **Creator & Sole Developer:** Ujjaval (Begusarai, India)
-* **GitHub Username:** `king-creator-max`
-* **Official Software Systems:** Victor Core, Victor AI, and the `victor-ai-ujjaval` package ecosystem.
-* **Copyright:** © 2026 Ujjaval (king-creator-max). All rights reserved.
+### 🌐 Connect & Verify
+* **GitHub:** [@king-creator-max](https://github.com/king-creator-max)
+* **NPM Registry:** [victor-ai-ujjaval](https://www.npmjs.com/package/victor-ai-ujjaval)
