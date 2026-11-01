@@ -1,17 +1,18 @@
 {
-  "name": "victor-cognitive-core",
-  "version": "0.0.1",
-  "type": "module",
-  "main": "cloud_server.mjs",
-  "scripts": {
-    "start": "node cloud_server.mjs"
+  "name": "victor-ai-ujjaval",
+  "version": "1.0.1",
+  "description": "Victor Core - The advanced cloud-accessible multi-modal web workspace and AI system.",
+  "author": "Ujjaval <king-creator-max@users.noreply.github.com> (https://github.com/king-creator-max)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/king-creator-max/victor-ai-ujjaval.git"
   },
-  "dependencies": {
-    "@gradio/client": "^1.6.0",
-    "mongodb": "^7.7.0",
-    "puppeteer": "^25.16.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  }
+  "keywords": [
+    "victor-core",
+    "victor-ai",
+    "ujjaval",
+    "king-creator-max",
+    "ai-workspace"
+  ],
+  "license": "MIT"
 }
