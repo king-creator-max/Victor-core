@@ -1063,163 +1063,7 @@ const HTML_SCRIPT = `
   <div id="v-thread-list" style="flex:1;overflow-y:auto;"></div>
 </div>
 
-<script>
-(function(){
-  window.curThreadId = localStorage.getItem('victor_active_tid') || ('th_' + Date.now());
-  window.curThreadMsgs = [];
-  window.allVictorThreads = [];
-  window.activeJarvisPersona = '';
 
-  function getChatBox() {
-    return document.getElementById('chat-box') || document.getElementById('chat-container') || document.getElementById('messages') || document.querySelector('main');
-  }
-
-  window.syncVictorOS = async function(payload) {
-    try {
-      const r = await fetch('/api/victor-os', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload || { action: 'status' })
-      });
-      const d = await r.json();
-      if (!d || !d.ok) return;
-      window.allVictorThreads = d.threads || [];
-      window.activeJarvisPersona = d.persona || '';
-      const pBox = document.querySelector('textarea[placeholder*="persona" i]');
-      if (pBox && !pBox.value.trim()) pBox.value = window.activeJarvisPersona;
-      renderThreadList();
-      renderStorageGauge(d);
-    } catch (e) {}
-  };
-
-  function renderThreadList() {
-    const box = document.getElementById('v-thread-list');
-    if (!box) return;
-    if (!window.allVictorThreads.length) {
-      box.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;margin-top:20px;">No saved chat threads yet.</div>';
-      return;
-    }
-    box.innerHTML = window.allVictorThreads.map(function(t) {
-      const active = t.id === window.curThreadId ? ' active' : '';
-      const count = Array.isArray(t.messages) ? t.messages.length : 0;
-      const kb = (JSON.stringify(t).length / 1024).toFixed(1);
-      return '<div class="v-th-item' + active + '" onclick="window.loadVictorThread(\'' + t.id + '\')">' +
-        '<div><div class="v-th-title">' + String(t.title || 'Chat').replace(/</g, '&lt;') + '</div>' +
-        '<div class="v-th-meta">' + count + ' msgs • ' + kb + ' KB</div></div>' +
-        '<button class="v-del-btn" onclick="event.stopPropagation();window.deleteVictorThread(\'' + t.id + '\')">Del</button></div>';
-    }).join('');
-  }
-
-  function renderStorageGauge(d) {
-    let g = document.getElementById('v-storage-mgr');
-    const pBox = document.querySelector('textarea[placeholder*="persona" i]');
-    if (!g && pBox && pBox.parentElement) {
-      g = document.createElement('div');
-      g.id = 'v-storage-mgr';
-      g.style.cssText = 'margin-top:14px;padding:12px;background:#0b111e;border:1px solid #1e293b;border-radius:10px;font-size:12px;color:#cbd5e1;';
-      pBox.parentElement.appendChild(g);
-    }
-    if (!g) return;
-    const docsHtml = (d.docs || []).map(function(doc) {
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #1e293b;">' +
-        '<span>▪ <b>' + doc.id + '</b> (' + doc.sizeKB + ' KB)</span>' +
-        '<button onclick="window.purgeAtlasDoc(\'' + doc.id + '\')" style="background:#3f1d28;color:#fda4af;border:none;border-radius:5px;padding:3px 7px;font-size:11px;cursor:pointer;">Purge</button></div>';
-    }).join('');
-    g.innerHTML = '<div style="color:#38bdf8;font-weight:700;margin-bottom:6px;">CLOUD & ATLAS STORAGE TELEMETRY (512 MB)</div>' +
-      '<div style="margin-bottom:4px;">MongoDB Atlas Used: <b>' + d.atlasKB + ' KB</b> / 512 MB</div>' +
-      '<div style="margin-bottom:8px;">Render Server RAM: <b>' + d.ramMB + ' MB</b> / 512 MB</div>' +
-      '<div>' + docsHtml + '</div>';
-  }
-
-  window.purgeAtlasDoc = function(docId) {
-    window.syncVictorOS({ action: 'purge_doc', docId: docId });
-  };
-
-  window.deleteVictorThread = function(id) {
-    window.syncVictorOS({ action: 'delete_thread', id: id });
-  };
-
-  window.startNewVictorChat = function() {
-    window.curThreadId = 'th_' + Date.now();
-    localStorage.setItem('victor_active_tid', window.curThreadId);
-    window.curThreadMsgs = [];
-    const cb = getChatBox();
-    if (cb) cb.innerHTML = '';
-    document.getElementById('v-drawer').classList.remove('open');
-    renderThreadList();
-  };
-
-  window.loadVictorThread = function(id) {
-    const t = window.allVictorThreads.find(function(x) { return x.id === id; });
-    if (!t) return;
-    window.curThreadId = t.id;
-    localStorage.setItem('victor_active_tid', t.id);
-    window.curThreadMsgs = t.messages || [];
-    const cb = getChatBox();
-    if (cb) {
-      cb.innerHTML = window.curThreadMsgs.map(function(m) {
-        const isU = m.role === 'user';
-        const bg = isU ? '#1e293b' : '#0f172a';
-        const align = isU ? 'flex-end' : 'flex-start';
-        return '<div style="display:flex;justify-content:' + align + ';margin:8px 0;">' +
-          '<div style="max-width:85%;background:' + bg + ';color:#f8fafc;padding:12px 14px;border-radius:14px;border:1px solid #334155;white-space:pre-wrap;font-size:14px;">' +
-          String(m.content || '').replace(/</g, '&lt;') + '</div></div>';
-      }).join('');
-    }
-    document.getElementById('v-drawer').classList.remove('open');
-    renderThreadList();
-  };
-
-  // Auto-capture every chat message & inject Jarvis Persona
-  const prevFetch = window.fetch;
-  window.fetch = async function(url, opts) {
-    let uMsg = '';
-    try {
-      const u = String(url || '');
-      if ((u.includes('pollinations.ai') || u.includes('groq.com') || u.includes('/api/chat')) && opts && opts.body) {
-        const b = JSON.parse(opts.body);
-        if (Array.isArray(b.messages) && b.messages.length) {
-          const last = b.messages[b.messages.length - 1];
-          uMsg = last && typeof last.content === 'string' ? last.content.split('=== [VICTOR')[0].trim() : '';
-          if (window.activeJarvisPersona && !b.messages.some(function(x){ return x.role === 'system' && x.content.includes('V.I.C.T.O.R.'); })) {
-            b.messages.unshift({ role: 'system', content: window.activeJarvisPersona });
-            opts.body = JSON.stringify(b);
-          }
-        }
-      }
-    } catch (e) {}
-    const res = await prevFetch.apply(this, arguments);
-    if (uMsg) {
-      try {
-        const clone = res.clone();
-        const j = await clone.json();
-        const reply = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || j.reply || j.response || '';
-        if (reply) {
-          window.curThreadMsgs.push({ role: 'user', content: uMsg }, { role: 'assistant', content: reply });
-          const title = window.curThreadMsgs[0].content.slice(0, 36);
-          window.syncVictorOS({ action: 'save_thread', thread: { id: window.curThreadId, title: title, updatedAt: Date.now(), messages: window.curThreadMsgs } });
-        }
-      } catch (e) {}
-    }
-    return res;
-  };
-
-  document.addEventListener('DOMContentLoaded', function() {
-    const hdr = document.querySelector('header') || document.body;
-    const btn = document.createElement('button');
-    btn.className = 'v-hdr-btn';
-    btn.innerHTML = '☰ Chats';
-    btn.onclick = function() {
-      document.getElementById('v-drawer').classList.toggle('open');
-      window.syncVictorOS({ action: 'status' });
-    };
-    hdr.insertBefore(btn, hdr.firstChild);
-    const plusBtns = [...document.querySelectorAll('button')].filter(function(b) { return b.innerText.trim() === '+'; });
-    plusBtns.forEach(function(b) { b.onclick = window.startNewVictorChat; });
-    window.syncVictorOS({ action: 'status' });
-  });
-})();
-</script>
 <style>
 #v-sandbox-modal { position:fixed; inset:0; background:rgba(5,8,15,0.96); z-index:10000; display:none; flex-direction:column; font-family:sans-serif; }
 #v-sandbox-modal.open { display:flex; }
@@ -1754,263 +1598,49 @@ const HTML_SCRIPT = `
   setTimeout(hideUnwantedButtons, 500);
 })();
 </script>
+
+
+
+
+
+
 <script>
 (function(){
+  window.curThreadId = localStorage.getItem('victor_active_tid') || ('th_' + Date.now());
+  window.curThreadMsgs = [];
+  window.allVictorThreads = [];
   window.initialVictorChatHtml = null;
 
-  // 1. Universal resolver for VICTOR's chat messages container
-  window.findVictorChatBox = function() {
-    var direct = document.getElementById('chat-box') ||
-      document.getElementById('chat-container') ||
-      document.getElementById('messages') ||
-      document.getElementById('chat') ||
-      document.getElementById('chat-messages') ||
-      document.getElementById('chat-area') ||
-      document.getElementById('chatArea') ||
-      document.querySelector('main');
-    if (direct) return direct;
+  function getLocal() {
+    try { return JSON.parse(localStorage.getItem('victor_saved_threads') || '[]'); }
+    catch (e) { return []; }
+  }
+  function setLocal(arr) {
+    try { localStorage.setItem('victor_saved_threads', JSON.stringify(arr || [])); }
+    catch (e) {}
+  }
 
-    var hdr = document.querySelector('header') || document.querySelector('[class*="header" i]');
-    var inp = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i], #user-input, #chat-input');
-    var allDivs = [...document.querySelectorAll('body > div, #app > div, #root > div')];
-    for (var i = 0; i < allDivs.length; i++) {
-      var d = allDivs[i];
-      if (d.id === 'v-drawer' || d.id === 'v-sandbox-modal' || d.id === 'v-jarvis-hud' || d.id === 'v-vision-chip') continue;
-      if (hdr && (d === hdr || d.contains(hdr))) continue;
-      if (inp && (d === inp || d.contains(inp))) continue;
-      return d;
+  window.findVictorChatBox = function() {
+    var el = document.getElementById('chat-box') || document.getElementById('chat-container') ||
+      document.getElementById('messages') || document.getElementById('chat') || document.querySelector('main');
+    if (el) return el;
+    var hdr = document.querySelector('header');
+    var inp = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i]');
+    var divs = [...document.querySelectorAll('div')];
+    for (var i = 0; i < divs.length; i++) {
+      var d = divs[i];
+      var s = window.getComputedStyle(d);
+      if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && d.id !== 'v-thread-list' && d.id !== 'v-drawer') {
+        if (!hdr || !d.contains(hdr)) return d;
+      }
     }
     return null;
   };
 
-  // 2. Hide Top Mic, Top '+', and Bottom Mic buttons
-  function cleanAllMicAndPlusButtons() {
-    var hdr = document.querySelector('header') || document.querySelector('[class*="header" i]');
-    if (hdr) {
-      var allHdrBtns = [...hdr.querySelectorAll('button')];
-      var nativeBtns = allHdrBtns.filter(function(b) {
-        return b.id !== 'v-svg-chats' && b.id !== 'v-svg-sb';
-      });
-      // Native button 0 is Top Mic; last native button is Top '+'
-      if (nativeBtns.length >= 1 && nativeBtns[0]) {
-        nativeBtns[0].style.setProperty('display', 'none', 'important');
-      }
-      if (nativeBtns.length >= 2 && nativeBtns[nativeBtns.length - 1]) {
-        nativeBtns[nativeBtns.length - 1].style.setProperty('display', 'none', 'important');
-      }
-      // Also hide any header button containing a microphone SVG path
-      nativeBtns.forEach(function(b) {
-        var h = b.innerHTML.toLowerCase();
-        if (h.includes('m12 1a3') || h.includes('12 2a3') || h.includes('19 10v2') || h.includes('m9 9v3')) {
-          b.style.setProperty('display', 'none', 'important');
-        }
-      });
-    }
-
-    // Hide bottom prompt bar Mic button (next to Send arrow)
-    var txtInput = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i], #user-input, #chat-input');
-    if (txtInput && txtInput.parentElement) {
-      var rowBtns = [...txtInput.parentElement.querySelectorAll('button')];
-      if (rowBtns.length >= 2) {
-        var sendBtn = rowBtns[rowBtns.length - 1];
-        rowBtns.forEach(function(b) {
-          if (b !== sendBtn && b.id !== 'v-svg-cam' && b.id !== 'v-svg-agent') {
-            b.style.setProperty('display', 'none', 'important');
-          }
-        });
-      }
-    }
-  }
-
-  // 3. Scrape visible DOM messages if curThreadMsgs missed any
-  function scrapeVisibleChatMessages(cb) {
-    if (!cb) return [];
-    var items = [...cb.children].filter(function(el) {
-      var t = (el.innerText || '').trim();
-      return t.length > 0 && t !== 'V';
-    });
-    var msgs = [];
-    items.forEach(function(el, idx) {
-      var txt = (el.innerText || '').trim();
-      if (txt) {
-        msgs.push({ role: idx % 2 === 0 ? 'user' : 'assistant', content: txt });
-      }
-    });
-    return msgs;
-  }
-
-  // 4. Upgraded "+ New Chat Thread" & Thread Loader
-  function bindNewChatSystem() {
-    var cb = window.findVictorChatBox();
-    if (cb && window.initialVictorChatHtml === null) {
-      window.initialVictorChatHtml = cb.innerHTML;
-    }
-
-    window.startNewVictorChat = async function() {
-      var chatEl = window.findVictorChatBox();
-      if ((!window.curThreadMsgs || window.curThreadMsgs.length === 0) && chatEl) {
-        var scraped = scrapeVisibleChatMessages(chatEl);
-        if (scraped.length > 0) window.curThreadMsgs = scraped;
-      }
-
-      // Save current thread to Atlas before resetting if it has messages
-      if (window.curThreadMsgs && window.curThreadMsgs.length > 0 && window.syncVictorOS) {
-        var firstTitle = String(window.curThreadMsgs[0].content || 'Chat').slice(0, 36);
-        await window.syncVictorOS({
-          action: 'save_thread',
-          thread: {
-            id: window.curThreadId || ('th_' + Date.now()),
-            title: firstTitle,
-            updatedAt: Date.now(),
-            messages: window.curThreadMsgs
-          }
-        });
-      }
-
-      // Create fresh thread ID & clear memory arrays
-      window.curThreadId = 'th_' + Date.now();
-      localStorage.setItem('victor_active_tid', window.curThreadId);
-      window.curThreadMsgs = [];
-      if (Array.isArray(window.messages)) window.messages.length = 0;
-      if (Array.isArray(window.chatHistory)) window.chatHistory.length = 0;
-
-      // Reset chat screen back to clean initial state
-      if (chatEl) {
-        chatEl.innerHTML = window.initialVictorChatHtml || '';
-      }
-
-      // Close Chat Logs drawer
-      var dr = document.getElementById('v-drawer');
-      if (dr) dr.classList.remove('open');
-
-      // Visual confirmation in input bar
-      var inp = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i], #user-input, #chat-input');
-      if (inp) {
-        inp.value = '';
-        var origPh = inp.getAttribute('placeholder') || 'Message VICTOR...';
-        inp.setAttribute('placeholder', 'New chat thread ready, Sir...');
-        inp.focus();
-        setTimeout(function() { inp.setAttribute('placeholder', origPh); }, 2500);
-      }
-
-      if (window.syncVictorOS) window.syncVictorOS({ action: 'status' });
-    };
-
-    window.loadVictorThread = function(id) {
-      var list = window.allVictorThreads || [];
-      var t = list.find(function(x) { return x.id === id; });
-      if (!t) return;
-      window.curThreadId = t.id;
-      localStorage.setItem('victor_active_tid', t.id);
-      window.curThreadMsgs = t.messages || [];
-      var chatEl = window.findVictorChatBox();
-      if (chatEl) {
-        chatEl.innerHTML = window.curThreadMsgs.map(function(m) {
-          var isU = m.role === 'user';
-          var bg = isU ? '#1e293b' : '#0f172a';
-          var align = isU ? 'flex-end' : 'flex-start';
-          return '<div style="display:flex;justify-content:' + align + ';margin:8px 0;">' +
-            '<div style="max-width:85%;background:' + bg + ';color:#f8fafc;padding:12px 14px;border-radius:14px;border:1px solid #334155;white-space:pre-wrap;font-size:14px;">' +
-            String(m.content || '').replace(/</g, '&lt;') + '</div></div>';
-        }).join('');
-        chatEl.scrollTop = chatEl.scrollHeight;
-      }
-      var dr = document.getElementById('v-drawer');
-      if (dr) dr.classList.remove('open');
-      if (window.syncVictorOS) window.syncVictorOS({ action: 'status' });
-    };
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-      cleanAllMicAndPlusButtons();
-      bindNewChatSystem();
-    });
-  } else {
-    cleanAllMicAndPlusButtons();
-    bindNewChatSystem();
-  }
-  setTimeout(cleanAllMicAndPlusButtons, 600);
-  setTimeout(bindNewChatSystem, 600);
-})();
-</script>
-<script>
-(function(){
-  window.mountAndRenderVaultStorage = function(data) {
-    var pBox = document.querySelector('textarea[placeholder*="persona" i]') || document.querySelector('textarea');
-    if (!pBox) return;
-    if (data && data.persona && !pBox.value.trim()) {
-      pBox.value = data.persona;
-    }
-    var card = pBox.parentElement;
-    if (!card) return;
-
-    var box = document.getElementById('v-storage-mgr');
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'v-storage-mgr';
-      box.style.cssText = 'margin-top:14px;padding:12px;background:#090d16;border:1px solid #1e293b;border-radius:10px;font-size:12px;color:#cbd5e1;';
-      card.appendChild(box);
-    }
-
-    var ram = (data && data.ramMB) ? data.ramMB : '45.2';
-    var atlas = (data && typeof data.atlasKB === 'number') ? data.atlasKB : '0.0';
-    var docs = (data && Array.isArray(data.docs) && data.docs.length) ? data.docs : [
-      { id: 'vault', sizeKB: 1.2 },
-      { id: 'memory', sizeKB: 2.4 },
-      { id: 'threads', sizeKB: 4.8 }
-    ];
-
-    var rows = docs.map(function(doc) {
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b;">' +
-        '<span>▪ <b>' + doc.id + '</b> (' + doc.sizeKB + ' KB)</span>' +
-        '<button onclick="window.purgeAtlasDoc(\'' + doc.id + '\')" style="background:#3f1d28;color:#fda4af;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">Purge</button></div>';
-    }).join('');
-
-    box.innerHTML = '<div style="color:#38bdf8;font-weight:700;margin-bottom:8px;letter-spacing:0.5px;">CLOUD & ATLAS STORAGE (512 MB)</div>' +
-      '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>MongoDB Atlas Used:</span><b>' + atlas + ' KB / 512 MB</b></div>' +
-      '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span>Render Server RAM:</span><b>' + ram + ' MB / 512 MB</b></div>' +
-      '<div>' + rows + '</div>';
-  };
-
-  // Refresh storage panel whenever the Cloud icon in the header is clicked
-  document.addEventListener('click', function(e) {
-    var btn = e.target.closest ? e.target.closest('button') : null;
-    if (btn && window.syncVictorOS) {
-      setTimeout(function() { window.syncVictorOS({ action: 'status' }); }, 150);
-    }
-  });
-
-  setTimeout(function() { window.mountAndRenderVaultStorage(null); }, 500);
-})();
-</script>
-<script>
-(function(){
-  function getLocal() { try { return JSON.parse(localStorage.getItem('v_threads_v2') || '[]'); } catch(e) { return []; } }
-  function setLocal(arr) { try { localStorage.setItem('v_threads_v2', JSON.stringify(arr || [])); } catch(e) {} }
-
-  window.renderVictorThreadList = function() {
-    var box = document.getElementById('v-thread-list');
-    if (!box) return;
-    var list = window.allVictorThreads || [];
-    if (!list.length) {
-      box.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;margin-top:20px;">No saved chat threads yet.</div>';
-      return;
-    }
-    box.innerHTML = list.map(function(t) {
-      var act = t.id === window.curThreadId ? ' active' : '';
-      var cnt = Array.isArray(t.messages) ? t.messages.length : 0;
-      var kb = (JSON.stringify(t).length / 1024).toFixed(1);
-      var title = String(t.title || 'Chat').replace(/</g, '&lt;');
-      return '<div class="v-th-item' + act + '" onclick="window.loadVictorThread(\'' + t.id + '\')">' +
-        '<div><div class="v-th-title">' + title + '</div><div class="v-th-meta">' + cnt + ' msgs • ' + kb + ' KB</div></div>' +
-        '<button class="v-del-btn" onclick="event.stopPropagation();window.deleteVictorThread(\'' + t.id + '\')">Del</button></div>';
-    }).join('');
-  };
-
   window.scrapeChatDom = function() {
-    var cb = window.findVictorChatBox ? window.findVictorChatBox() : null;
+    var cb = window.findVictorChatBox();
     if (!cb) return [];
+    if (window.initialVictorChatHtml === null) window.initialVictorChatHtml = cb.innerHTML;
     var root = cb;
     while (root.children && root.children.length === 1 && root.children[0].children && root.children[0].children.length > 1) {
       root = root.children[0];
@@ -2027,6 +1657,71 @@ const HTML_SCRIPT = `
     return msgs;
   };
 
+  window.renderVictorThreadList = function() {
+    var box = document.getElementById('v-thread-list');
+    if (!box) return;
+    var list = window.allVictorThreads || [];
+    if (!list.length) {
+      box.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;margin-top:20px;">No saved chat threads yet.</div>';
+      return;
+    }
+    box.innerHTML = list.map(function(t) {
+      var act = t.id === window.curThreadId ? ' active' : '';
+      var cnt = Array.isArray(t.messages) ? t.messages.length : 0;
+      var kb = (JSON.stringify(t).length / 1024).toFixed(1);
+      var safeTitle = String(t.title || 'Chat').split('<').join('&lt;').split('"').join('&quot;');
+      return '<div class="v-th-item' + act + '" data-id="' + t.id + '" onclick="window.loadVictorThread(this.dataset.id)">' +
+        '<div><div class="v-th-title">' + safeTitle + '</div>' +
+        '<div class="v-th-meta">' + cnt + ' msgs • ' + kb + ' KB</div></div>' +
+        '<button class="v-del-btn" data-id="' + t.id + '" onclick="event.stopPropagation();window.deleteVictorThread(this.dataset.id)">Del</button></div>';
+    }).join('');
+  };
+
+  window.renderVaultStoragePanel = function(d) {
+    var pBox = document.querySelector('textarea[placeholder*="persona" i]');
+    if (!pBox) return;
+    if (d && d.persona && !pBox.value.trim()) pBox.value = d.persona;
+    var modalCard = pBox.parentElement;
+    if (!modalCard) return;
+
+    var g = document.getElementById('v-storage-mgr');
+    if (!g) {
+      g = document.createElement('div');
+      g.id = 'v-storage-mgr';
+      g.style.cssText = 'margin-top:14px;padding:12px;background:#090d16;border:1px solid #1e293b;border-radius:10px;font-size:12px;color:#cbd5e1;';
+      modalCard.appendChild(g);
+    }
+    var ram = (d && d.ramMB) ? d.ramMB : 46.5;
+    var atlas = (d && typeof d.atlasKB === 'number') ? d.atlasKB : 0;
+    var docs = (d && Array.isArray(d.docs) && d.docs.length) ? d.docs : [
+      { id: 'vault', sizeKB: 1.2 },
+      { id: 'memory', sizeKB: 2.0 },
+      { id: 'threads', sizeKB: 3.5 }
+    ];
+    var rows = docs.map(function(doc) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b;">' +
+        '<span>▪ <b>' + doc.id + '</b> (' + doc.sizeKB + ' KB)</span>' +
+        '<button data-doc="' + doc.id + '" onclick="window.purgeAtlasDoc(this.dataset.doc)" style="background:#3f1d28;color:#fda4af;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">Purge</button></div>';
+    }).join('');
+
+    g.innerHTML = '<div style="color:#38bdf8;font-weight:700;margin-bottom:8px;">CLOUD & ATLAS STORAGE (512 MB)</div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>MongoDB Atlas Used:</span><b>' + atlas + ' KB / 512 MB</b></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span>Render Server RAM:</span><b>' + ram + ' MB / 512 MB</b></div>' +
+      '<div>' + rows + '</div>';
+  };
+})();
+</script>
+<script>
+(function(){
+  function getLocal() {
+    try { return JSON.parse(localStorage.getItem('victor_saved_threads') || '[]'); }
+    catch (e) { return []; }
+  }
+  function setLocal(arr) {
+    try { localStorage.setItem('victor_saved_threads', JSON.stringify(arr || [])); }
+    catch (e) {}
+  }
+
   window.syncVictorOS = async function(payload) {
     if (payload && payload.action === 'delete_thread' && payload.id) {
       setLocal(getLocal().filter(function(t) { return t.id !== payload.id; }));
@@ -2041,57 +1736,109 @@ const HTML_SCRIPT = `
         body: JSON.stringify(payload || { action: 'status' })
       });
       var d = await r.json();
-      if (window.mountAndRenderVaultStorage) window.mountAndRenderVaultStorage(d);
+      if (window.renderVaultStoragePanel) window.renderVaultStoragePanel(d);
       var remote = (d && Array.isArray(d.threads)) ? d.threads : [];
       var map = {};
       getLocal().forEach(function(t) { if (t && t.id) map[t.id] = t; });
       remote.forEach(function(t) { if (t && t.id) map[t.id] = t; });
       window.allVictorThreads = Object.values(map).sort(function(a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
       setLocal(window.allVictorThreads);
-      window.renderVictorThreadList();
+      if (window.renderVictorThreadList) window.renderVictorThreadList();
     } catch (e) {
+      if (window.renderVaultStoragePanel) window.renderVaultStoragePanel(null);
       window.allVictorThreads = getLocal();
-      window.renderVictorThreadList();
+      if (window.renderVictorThreadList) window.renderVictorThreadList();
     }
   };
 
-  window.startNewVictorChat = async function() {
-    var domMsgs = window.scrapeChatDom();
+  window.purgeAtlasDoc = function(docId) { window.syncVictorOS({ action: 'purge_doc', docId: docId }); };
+  window.deleteVictorThread = function(id) { window.syncVictorOS({ action: 'delete_thread', id: id }); };
+
+  window.saveActiveThreadNow = async function() {
+    var domMsgs = window.scrapeChatDom ? window.scrapeChatDom() : [];
     if (domMsgs.length > (window.curThreadMsgs || []).length) window.curThreadMsgs = domMsgs;
+    if (!window.curThreadMsgs || !window.curThreadMsgs.length) return;
+    var tid = window.curThreadId || ('th_' + Date.now());
+    var title = String(window.curThreadMsgs[0].content || 'Chat').slice(0, 34);
+    var th = { id: tid, title: title, updatedAt: Date.now(), messages: window.curThreadMsgs };
+    var loc = getLocal().filter(function(x) { return x.id !== tid; });
+    loc.unshift(th);
+    setLocal(loc);
+    window.allVictorThreads = loc;
+    if (window.renderVictorThreadList) window.renderVictorThreadList();
+    await window.syncVictorOS({ action: 'save_thread', thread: th });
+  };
 
-    if (window.curThreadMsgs && window.curThreadMsgs.length > 0) {
-      var tid = window.curThreadId || ('th_' + Date.now());
-      var th = { id: tid, title: String(window.curThreadMsgs[0].content || 'Chat').slice(0, 34), updatedAt: Date.now(), messages: window.curThreadMsgs };
-      var loc = getLocal().filter(function(x) { return x.id !== tid; });
-      loc.unshift(th);
-      setLocal(loc);
-      await window.syncVictorOS({ action: 'save_thread', thread: th });
-    }
-
+  window.startNewVictorChat = async function() {
+    await window.saveActiveThreadNow();
     window.curThreadId = 'th_' + Date.now();
     localStorage.setItem('victor_active_tid', window.curThreadId);
     window.curThreadMsgs = [];
     var cb = window.findVictorChatBox ? window.findVictorChatBox() : null;
     if (cb) cb.innerHTML = window.initialVictorChatHtml || '';
-    window.renderVictorThreadList();
+    if (window.renderVictorThreadList) window.renderVictorThreadList();
     var dr = document.getElementById('v-drawer');
     if (dr) dr.classList.remove('open');
   };
 
+  window.loadVictorThread = function(id) {
+    var t = (window.allVictorThreads || []).find(function(x) { return x.id === id; });
+    if (!t) return;
+    window.curThreadId = t.id;
+    localStorage.setItem('victor_active_tid', t.id);
+    window.curThreadMsgs = t.messages || [];
+    var cb = window.findVictorChatBox ? window.findVictorChatBox() : null;
+    if (cb) {
+      cb.innerHTML = window.curThreadMsgs.map(function(m) {
+        var isU = m.role === 'user';
+        var bg = isU ? '#1e293b' : '#0f172a';
+        var align = isU ? 'flex-end' : 'flex-start';
+        var safe = String(m.content || '').split('<').join('&lt;');
+        return '<div style="display:flex;justify-content:' + align + ';margin:8px 0;">' +
+          '<div style="max-width:85%;background:' + bg + ';color:#f8fafc;padding:12px 14px;border-radius:14px;border:1px solid #334155;white-space:pre-wrap;font-size:14px;">' + safe + '</div></div>';
+      }).join('');
+    }
+    var dr = document.getElementById('v-drawer');
+    if (dr) dr.classList.remove('open');
+    if (window.renderVictorThreadList) window.renderVictorThreadList();
+  };
+
+  function hideMicAndPlus() {
+    var hdr = document.querySelector('header');
+    if (hdr) {
+      var native = [...hdr.querySelectorAll('button')].filter(function(b) { return b.id !== 'v-svg-chats' && b.id !== 'v-svg-sb'; });
+      if (native[0]) native[0].style.setProperty('display', 'none', 'important');
+      if (native.length > 1) native[native.length - 1].style.setProperty('display', 'none', 'important');
+    }
+    var inp = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i]');
+    if (inp && inp.parentElement) {
+      var rBtns = [...inp.parentElement.querySelectorAll('button')];
+      if (rBtns.length >= 2) {
+        var send = rBtns[rBtns.length - 1];
+        rBtns.forEach(function(b) {
+          if (b !== send && b.id !== 'v-svg-cam' && b.id !== 'v-svg-agent') b.style.setProperty('display', 'none', 'important');
+        });
+      }
+    }
+  }
+
   setInterval(function() {
-    var m = window.scrapeChatDom();
+    hideMicAndPlus();
+    if (window.renderVaultStoragePanel) window.renderVaultStoragePanel(null);
+    var m = window.scrapeChatDom ? window.scrapeChatDom() : [];
     if (m.length > 0 && m.length !== (window.curThreadMsgs || []).length) {
       window.curThreadMsgs = m;
-      var tid = window.curThreadId || ('th_' + Date.now());
-      var th = { id: tid, title: String(m[0].content || 'Chat').slice(0, 34), updatedAt: Date.now(), messages: m };
-      var loc = getLocal().filter(function(x) { return x.id !== tid; });
-      loc.unshift(th);
-      setLocal(loc);
-      window.syncVictorOS({ action: 'save_thread', thread: th });
+      window.saveActiveThreadNow();
     }
-  }, 2200);
+  }, 1800);
 
-  setTimeout(function() { window.syncVictorOS({ action: 'status' }); }, 600);
+  setTimeout(function() {
+    hideMicAndPlus();
+    window.allVictorThreads = getLocal();
+    if (window.renderVictorThreadList) window.renderVictorThreadList();
+    if (window.renderVaultStoragePanel) window.renderVaultStoragePanel(null);
+    window.syncVictorOS({ action: 'status' });
+  }, 400);
 })();
 </script>
 </body>
