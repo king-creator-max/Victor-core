@@ -1684,6 +1684,334 @@ const HTML_SCRIPT = `
   setTimeout(mountAgentButton, 800);
 })();
 </script>
+<style>
+#v-voice-modal { position:fixed; inset:0; background:#000000; z-index:10020; display:none; flex-direction:column; justify-content:space-between; align-items:center; padding:22px 20px 28px 20px; box-sizing:border-box; font-family:sans-serif; user-select:none; }
+#v-voice-modal.open { display:flex; }
+.vv-top-bar { width:100%; display:flex; justify-content:space-between; align-items:center; }
+.vv-icon-btn { width:46px; height:46px; border-radius:50%; background:#1c1c1e; border:none; color:#f8fafc; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
+.vv-icon-btn.active { background:#0284c7; color:#ffffff; }
+.vv-center-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; width:100%; position:relative; }
+.vv-orb-box { width:235px; height:235px; border-radius:50%; position:relative; overflow:hidden; cursor:pointer; background:radial-gradient(circle at 35% 25%, #00b4ff 0%, #0284c7 45%, #bae6fd 80%, #ffffff 100%); box-shadow:0 0 60px rgba(0,180,255,0.28), inset 0 -25px 45px rgba(255,255,255,0.85); transition:transform 0.35s ease, box-shadow 0.35s ease; animation:vvFloat 5s ease-in-out infinite; }
+.vv-orb-cloud1 { position:absolute; inset:-35%; background:radial-gradient(circle at 65% 70%, rgba(255,255,255,0.95) 0%, rgba(186,230,253,0.75) 35%, rgba(2,132,199,0) 70%); filter:blur(14px); animation:vvSwirl 9s linear infinite; }
+.vv-orb-cloud2 { position:absolute; inset:-25%; background:radial-gradient(circle at 30% 60%, rgba(255,255,255,0.9) 0%, rgba(56,189,248,0.65) 40%, rgba(0,180,255,0) 72%); filter:blur(18px); animation:vvSwirlRev 7s linear infinite; }
+.vv-orb-box.listening { transform:scale(1.06); box-shadow:0 0 85px rgba(56,189,248,0.48), inset 0 -25px 50px rgba(255,255,255,0.92); }
+.vv-orb-box.thinking { animation:vvPulseFast 1.1s ease-in-out infinite; box-shadow:0 0 95px rgba(14,165,233,0.75), inset 0 0 55px #ffffff; }
+.vv-orb-box.speaking { animation:vvSpeakWave 0.65s ease-in-out infinite alternate; box-shadow:0 0 110px rgba(56,189,248,0.85), inset 0 -30px 60px #ffffff; }
+@keyframes vvSwirl { 0%{transform:rotate(0deg) scale(1);} 50%{transform:rotate(180deg) scale(1.12);} 100%{transform:rotate(360deg) scale(1);} }
+@keyframes vvSwirlRev { 0%{transform:rotate(360deg) scale(1.08);} 50%{transform:rotate(180deg) scale(0.95);} 100%{transform:rotate(0deg) scale(1.08);} }
+@keyframes vvFloat { 0%,100%{transform:translateY(0px);} 50%{transform:translateY(-8px);} }
+@keyframes vvPulseFast { 0%,100%{transform:scale(0.96);} 50%{transform:scale(1.08);} }
+@keyframes vvSpeakWave { 0%{transform:scale(1.0) rotate(-2deg);} 100%{transform:scale(1.14) rotate(2deg);} }
+#vv-status { margin-top:26px; font-size:13px; color:#94a3b8; letter-spacing:0.6px; font-weight:500; text-align:center; min-height:20px; }
+#vv-caption { margin-top:10px; max-width:90%; color:#e2e8f0; font-size:14px; text-align:center; line-height:1.45; max-height:85px; overflow-y:auto; display:none; padding:8px 14px; background:#111318; border-radius:12px; border:1px solid #1e293b; }
+#vv-caption.show { display:block; }
+.vv-bottom-bar { width:100%; display:flex; align-items:center; gap:12px; }
+.vv-ask-pill { flex:1; height:54px; background:#1c1c1e; border-radius:27px; display:flex; align-items:center; padding:0 18px; gap:10px; }
+.vv-ask-pill input { flex:1; background:transparent; border:none; outline:none; color:#f8fafc; font-size:15px; }
+.vv-mute-btn { width:54px; height:54px; border-radius:50%; background:#1c1c1e; border:none; color:#f8fafc; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.vv-mute-btn.muted { background:#3f1d28; color:#fda4af; }
+.vv-close-btn { width:54px; height:54px; border-radius:50%; background:#ffffff; border:none; color:#000000; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+</style>
+
+<div id="v-voice-modal">
+  <div class="vv-top-bar">
+    <button class="vv-icon-btn" id="vv-cap-btn" onclick="window.toggleVictorVoiceCaptions()" title="Toggle Captions">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="14" y2="15"/></svg>
+    </button>
+    <button class="vv-icon-btn" id="vv-spd-btn" onclick="window.cycleVictorVoiceSpeed()" title="Voice Speed & Tuning">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.5" fill="#1c1c1e"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.5" fill="#1c1c1e"/></svg>
+    </button>
+  </div>
+
+  <div class="vv-center-wrap">
+    <div class="vv-orb-box" id="vv-orb" onclick="window.tapVictorOrb()">
+      <div class="vv-orb-cloud1"></div>
+      <div class="vv-orb-cloud2"></div>
+    </div>
+    <div id="vv-status">Tap orb or speak to begin</div>
+    <div id="vv-caption"></div>
+  </div>
+
+  <div class="vv-bottom-bar">
+    <div class="vv-ask-pill">
+      <span style="color:#94a3b8;font-size:22px;line-height:1;">+</span>
+      <input type="text" id="vv-text-in" placeholder="Ask VICTOR" onkeydown="if(event.key==='Enter'){window.sendVoiceTextPrompt();}" />
+    </div>
+    <button class="vv-mute-btn" id="vv-mute-btn" onclick="window.toggleVictorVoiceMute()" title="Mute / Unmute Microphone">
+      <svg id="vv-mic-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+    </button>
+    <button class="vv-close-btn" onclick="window.closeVictorVoiceMode()" title="End Voice Mode">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+(function(){
+  window.vvOpen = false;
+  window.vvMuted = false;
+  window.vvCaptions = false;
+  window.vvSpeedIdx = 0;
+  var speeds = [1.0, 1.15, 0.92];
+  var speedLabels = ['1.0x Normal', '1.15x Tactical', '0.92x Deep'];
+  var recog = null;
+  var isSpeaking = false;
+  var isThinking = false;
+
+  function setOrbState(state, label, capText) {
+    var orb = document.getElementById('vv-orb');
+    var st = document.getElementById('vv-status');
+    var cap = document.getElementById('vv-caption');
+    if (orb) {
+      orb.className = 'vv-orb-box' + (state ? ' ' + state : '');
+    }
+    if (st && label) st.innerText = label;
+    if (cap && typeof capText === 'string' && capText) {
+      cap.innerText = capText;
+    }
+  }
+
+  function cleanSpeechText(raw) {
+    var s = String(raw || '');
+    var BT = String.fromCharCode(96);
+    s = s.split(BT + BT + BT)[0];
+    s = s.split('*').join('').split('#').join('').split(BT).join('').split('_').join('');
+    return s.trim().slice(0, 900);
+  }
+
+  function pickJarvisVoice() {
+    if (!window.speechSynthesis) return null;
+    var voices = window.speechSynthesis.getVoices() || [];
+    var ukMale = voices.find(function(v) { return v.lang.includes('en-GB') && v.name.toLowerCase().includes('male'); });
+    var anyUk = voices.find(function(v) { return v.lang.includes('en-GB'); });
+    var anyEn = voices.find(function(v) { return v.lang.startsWith('en'); });
+    return ukMale || anyUk || anyEn || voices[0] || null;
+  }
+
+  function startListeningLoop() {
+    if (!window.vvOpen || window.vvMuted || isSpeaking || isThinking) return;
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setOrbState('', 'Use Ask VICTOR bar below (Browser Mic API unavailable)');
+      return;
+    }
+    try {
+      if (recog) { try { recog.abort(); } catch (e) {} }
+      recog = new SR();
+      recog.lang = 'en-IN';
+      recog.continuous = false;
+      recog.interimResults = true;
+
+      recog.onstart = function() {
+        if (!isSpeaking && !isThinking) setOrbState('listening', 'Listening, Sir...');
+      };
+
+      recog.onresult = function(ev) {
+        var transcript = '';
+        var isFinal = false;
+        for (var i = ev.resultIndex; i < ev.results.length; i++) {
+          transcript += ev.results[i][0].transcript;
+          if (ev.results[i].isFinal) isFinal = true;
+        }
+        if (transcript) {
+          setOrbState('listening', 'Hearing: "' + transcript.slice(0, 48) + '"', transcript);
+        }
+        if (isFinal && transcript.trim()) {
+          processVoiceQuery(transcript.trim());
+        }
+      };
+
+      recog.onerror = function() {
+        if (window.vvOpen && !window.vvMuted && !isSpeaking && !isThinking) {
+          setTimeout(startListeningLoop, 900);
+        }
+      };
+
+      recog.onend = function() {
+        if (window.vvOpen && !window.vvMuted && !isSpeaking && !isThinking) {
+          setTimeout(startListeningLoop, 500);
+        }
+      };
+
+      recog.start();
+    } catch (e) {}
+  }
+
+  function speakJarvisReply(text) {
+    if (!window.vvOpen) return;
+    var clean = cleanSpeechText(text);
+    if (!clean || !window.speechSynthesis) {
+      isSpeaking = false;
+      setOrbState('listening', 'Listening, Sir...');
+      startListeningLoop();
+      return;
+    }
+    try {
+      window.speechSynthesis.cancel();
+      var utter = new SpeechSynthesisUtterance(clean);
+      var v = pickJarvisVoice();
+      if (v) utter.voice = v;
+      utter.rate = speeds[window.vvSpeedIdx] || 1.0;
+      utter.pitch = 0.94;
+      isSpeaking = true;
+      setOrbState('speaking', 'VICTOR Speaking (Tap orb to interrupt)', clean);
+
+      utter.onend = function() {
+        isSpeaking = false;
+        if (window.vvOpen && !window.vvMuted) {
+          setOrbState('listening', 'Listening, Sir...');
+          startListeningLoop();
+        } else {
+          setOrbState('', 'Muted — Tap Mic or Orb');
+        }
+      };
+
+      utter.onerror = function() {
+        isSpeaking = false;
+        if (window.vvOpen && !window.vvMuted) startListeningLoop();
+      };
+
+      window.speechSynthesis.speak(utter);
+    } catch (e) {
+      isSpeaking = false;
+      startListeningLoop();
+    }
+  }
+
+  async function processVoiceQuery(queryText) {
+    if (!queryText || isThinking) return;
+    isThinking = true;
+    if (recog) { try { recog.abort(); } catch (e) {} }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    setOrbState('thinking', 'Processing telemetry...', 'Sir: ' + queryText);
+
+    try {
+      var sysPrompt = (window.activeJarvisPersona || 'You are V.I.C.T.O.R., a J.A.R.V.I.S.-class AI engineered by Ujjaval (Sir).') +
+        ' You are currently in real-time Live Voice Mode. Keep your spoken response natural, sharp, concise (2 to 4 sentences unless asked for detail), and address Ujjaval as Sir.';
+      var res = await window.fetch('https://text.pollinations.ai/openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'openai',
+          messages: [
+            { role: 'system', content: sysPrompt },
+            { role: 'user', content: queryText }
+          ]
+        })
+      });
+      var data = await res.json();
+      var reply = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || 'Telemetry processed, Sir.';
+
+      var cb = document.getElementById('chat-box') || document.getElementById('chat-container') || document.getElementById('messages') || document.querySelector('main');
+      if (cb) {
+        cb.innerHTML += '<div style="display:flex;justify-content:flex-end;margin:8px 0;"><div style="max-width:85%;background:#1e293b;color:#f8fafc;padding:12px 14px;border-radius:14px;border:1px solid #334155;font-size:14px;">' + queryText.replace(/</g, '&lt;') + '</div></div>' +
+          '<div style="display:flex;justify-content:flex-start;margin:8px 0;"><div style="max-width:85%;background:#0f172a;color:#f8fafc;padding:12px 14px;border-radius:14px;border:1px solid #334155;font-size:14px;">' + reply.replace(/</g, '&lt;') + '</div></div>';
+        cb.scrollTop = cb.scrollHeight;
+      }
+
+      isThinking = false;
+      speakJarvisReply(reply);
+    } catch (e) {
+      isThinking = false;
+      speakJarvisReply('I encountered a network interruption, Sir. Please repeat your command.');
+    }
+  }
+
+  window.openVictorVoiceMode = function() {
+    var modal = document.getElementById('v-voice-modal');
+    if (!modal) return;
+    window.vvOpen = true;
+    window.vvMuted = false;
+    document.getElementById('vv-mute-btn').classList.remove('muted');
+    modal.classList.add('open');
+    speakJarvisReply('Live voice protocol online, Sir. How may I assist you?');
+  };
+
+  window.closeVictorVoiceMode = function() {
+    window.vvOpen = false;
+    isSpeaking = false;
+    isThinking = false;
+    if (recog) { try { recog.abort(); } catch (e) {} }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    var modal = document.getElementById('v-voice-modal');
+    if (modal) modal.classList.remove('open');
+  };
+
+  window.tapVictorOrb = function() {
+    if (isSpeaking && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      isSpeaking = false;
+      setOrbState('listening', 'Interrupted — Listening, Sir...');
+      startListeningLoop();
+    } else if (!isThinking) {
+      window.vvMuted = false;
+      document.getElementById('vv-mute-btn').classList.remove('muted');
+      startListeningLoop();
+    }
+  };
+
+  window.toggleVictorVoiceMute = function() {
+    window.vvMuted = !window.vvMuted;
+    var btn = document.getElementById('vv-mute-btn');
+    if (btn) btn.classList.toggle('muted', window.vvMuted);
+    if (window.vvMuted) {
+      if (recog) { try { recog.abort(); } catch (e) {} }
+      setOrbState('', 'Microphone Muted');
+    } else {
+      setOrbState('listening', 'Listening, Sir...');
+      startListeningLoop();
+    }
+  };
+
+  window.toggleVictorVoiceCaptions = function() {
+    window.vvCaptions = !window.vvCaptions;
+    var cap = document.getElementById('vv-caption');
+    var btn = document.getElementById('vv-cap-btn');
+    if (cap) cap.classList.toggle('show', window.vvCaptions);
+    if (btn) btn.classList.toggle('active', window.vvCaptions);
+  };
+
+  window.cycleVictorVoiceSpeed = function() {
+    window.vvSpeedIdx = (window.vvSpeedIdx + 1) % speeds.length;
+    setOrbState(isSpeaking ? 'speaking' : 'listening', 'Voice Tuning: ' + speedLabels[window.vvSpeedIdx]);
+  };
+
+  window.sendVoiceTextPrompt = function() {
+    var inp = document.getElementById('vv-text-in');
+    if (!inp || !inp.value.trim()) return;
+    var val = inp.value.trim();
+    inp.value = '';
+    processVoiceQuery(val);
+  };
+
+  function bindHeaderMicButton() {
+    var hdr = document.querySelector('header') || document.querySelector('[class*="header" i]');
+    if (!hdr) return;
+    var btns = [...hdr.querySelectorAll('button')];
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      if (b.id === 'v-svg-chats' || b.id === 'v-svg-sb') continue;
+      var html = b.innerHTML.toLowerCase();
+      if (html.includes('m12 1a3') || html.includes('19 10v2a7') || html.includes('mic') || i === 2) {
+        b.title = 'Launch Live Voice Mode';
+        b.onclick = function(ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          window.openVictorVoiceMode();
+        };
+        break;
+      }
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindHeaderMicButton);
+  } else {
+    bindHeaderMicButton();
+  }
+  setTimeout(bindHeaderMicButton, 900);
+})();
+</script>
 </body>
 </html>`;
 
