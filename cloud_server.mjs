@@ -97,6 +97,66 @@ async function analyzeVictorImage(base64DataUrl, userPrompt) {
   };
 }
 
+
+// === VICTOR PHASE 3: AUTONOMOUS JARVIS PROTOCOL & AUTO-VAULT ===
+async function runJarvisProtocolBackend(rawGoal) {
+  const goal = String(rawGoal || '').replace(/^(protocol:|jarvis:|agent:)\s*/i, '').trim();
+  const low = goal.toLowerCase();
+
+  // Stage 1: Live 8-Core Omni-Core Web Recon
+  let webIntel = '';
+  try {
+    const w = await executeChromiumTask(goal);
+    if (w && w.intel) webIntel = w.intel;
+  } catch (e) {}
+
+  // Stage 2: Stark Vault Auto-Memory Extraction (MongoDB Atlas)
+  let memorySaved = false;
+  try {
+    if (typeof MEMORY !== 'undefined') {
+      if (!Array.isArray(MEMORY.vaultFacts)) MEMORY.vaultFacts = [];
+      if (low.includes('remember') || low.includes('project') || low.includes('channel') || low.includes('build') || low.includes('my ')) {
+        const fact = '[' + new Date().toISOString().slice(0, 10) + '] ' + goal.slice(0, 160);
+        if (!MEMORY.vaultFacts.includes(fact)) {
+          MEMORY.vaultFacts.unshift(fact);
+          if (MEMORY.vaultFacts.length > 40) MEMORY.vaultFacts = MEMORY.vaultFacts.slice(0, 40);
+          fs.writeFileSync(memFile, JSON.stringify(MEMORY));
+          memorySaved = true;
+        }
+      }
+    }
+  } catch (e) {}
+
+  // Stage 3: Detect if Visual Asset / Thumbnail / Poster Generation is part of the chain
+  const wantsImage = /\b(image|thumbnail|poster|wallpaper|logo|art|render| diagram|visual|banner|photo)\b/i.test(goal);
+  let imageUrl = '';
+  if (wantsImage) {
+    const cleanImgPrompt = goal
+      .replace(/^(protocol|jarvis|research|search|inspect|write|create|build|make|and|then)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 220);
+    const seed = Math.floor(Math.random() * 999999);
+    imageUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(cleanImgPrompt + ', ultra detailed, 8k resolution, cinematic lighting') + '?width=1280&height=720&seed=' + seed + '&nologo=true';
+  }
+
+  const vaultContext = (typeof MEMORY !== 'undefined' && Array.isArray(MEMORY.vaultFacts) && MEMORY.vaultFacts.length)
+    ? '--- [STARK VAULT LONG-TERM MEMORY] ---\n' + MEMORY.vaultFacts.slice(0, 8).join('\n')
+    : '';
+
+  const directive = [
+    '=== [JARVIS PROTOCOL: AUTONOMOUS MULTI-STEP EXECUTION] ===',
+    '[SYSTEM MANDATE: Execute Sir\'s multi-step mission in structured sections:',
+    '1. TELEMETRY & RESEARCH FINDINGS (Synthesize the live 8-core web data below)',
+    '2. STRATEGIC SCRIPT / ARCHITECTURE / CODE (Provide complete scripts or runnable <!DOCTYPE html> code if requested)',
+    '3. EXECUTION SUMMARY (Confirm all chained stages completed)]',
+    vaultContext,
+    webIntel
+  ].filter(Boolean).join('\n\n');
+
+  return { ok: true, directive, imageUrl, memorySaved };
+}
+
 // === VICTOR MASTER CHROMIUM ENGINE ===
 // === VICTOR OMNI-CORE WEB ENGINE v6.0 ===
 const JARVIS_KNOWN_SITES = {
@@ -1488,12 +1548,164 @@ const HTML_SCRIPT = `
   setTimeout(mountVictorIcons, 600);
 })();
 </script>
+
+<style>
+#v-jarvis-hud { position:fixed; bottom:125px; left:50%; transform:translateX(-50%); background:#090d16; border:1px solid #1e293b; border-radius:10px; padding:8px 14px; display:none; align-items:center; gap:12px; z-index:9500; box-shadow:0 8px 25px rgba(0,0,0,0.75); font-family:monospace; font-size:11px; color:#64748b; white-space:nowrap; }
+#v-jarvis-hud.active { display:flex; }
+.v-hud-step { display:inline-flex; align-items:center; gap:5px; }
+.v-hud-step.run { color:#38bdf8; font-weight:700; }
+.v-hud-step.done { color:#94a3b8; }
+.v-hud-dot { width:6px; height:6px; border-radius:50%; background:#334155; }
+.v-hud-step.run .v-hud-dot { background:#38bdf8; box-shadow:0 0 8px #38bdf8; }
+.v-hud-step.done .v-hud-dot { background:#64748b; }
+#v-svg-agent.active-protocol { border-color:#38bdf8 !important; color:#38bdf8 !important; background:#0f2238 !important; }
+.v-asset-card { margin-top:12px; padding:10px; background:#090d16; border:1px solid #1e293b; border-radius:10px; }
+.v-asset-card img { width:100%; max-width:520px; border-radius:8px; display:block; margin-bottom:8px; border:1px solid #1e293b; }
+</style>
+
+<div id="v-jarvis-hud">
+  <div class="v-hud-step" id="vh-s1"><span class="v-hud-dot"></span>01 RECON</div>
+  <span>/</span>
+  <div class="v-hud-step" id="vh-s2"><span class="v-hud-dot"></span>02 VAULT</div>
+  <span>/</span>
+  <div class="v-hud-step" id="vh-s3"><span class="v-hud-dot"></span>03 SYNTHESIS</div>
+  <span>/</span>
+  <div class="v-hud-step" id="vh-s4"><span class="v-hud-dot"></span>04 DEPLOY</div>
+</div>
+
+<script>
+(function(){
+  window.jarvisProtocolActive = false;
+  window.lastProtocolImage = '';
+
+  function setHudStage(stage) {
+    var hud = document.getElementById('v-jarvis-hud');
+    if (!hud) return;
+    if (stage === 0) { hud.classList.remove('active'); return; }
+    hud.classList.add('active');
+    for (var i = 1; i <= 4; i++) {
+      var el = document.getElementById('vh-s' + i);
+      if (!el) continue;
+      el.className = 'v-hud-step' + (i < stage ? ' done' : (i === stage ? ' run' : ''));
+    }
+  }
+
+  function isMultiStepPrompt(txt) {
+    var low = String(txt || '').toLowerCase();
+    if (low.startsWith('protocol:') || low.startsWith('jarvis:') || low.startsWith('agent:')) return true;
+    var hasWeb = /\b(research|search|inspect|find|trending|latest)\b/.test(low);
+    var hasCreate = /\b(write|script|build|code|create|generate|thumbnail|image|poster|app)\b/.test(low);
+    return hasWeb && hasCreate;
+  }
+
+  function mountAgentButton() {
+    var camBtn = document.getElementById('v-svg-cam');
+    if (camBtn && camBtn.parentElement && !document.getElementById('v-svg-agent')) {
+      var agBtn = document.createElement('button');
+      agBtn.id = 'v-svg-agent';
+      agBtn.type = 'button';
+      agBtn.title = 'Toggle Jarvis Multi-Step Protocol';
+      agBtn.style.cssText = 'background:transparent;color:#94a3b8;border:1px solid #1e293b;border-radius:8px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;margin-right:8px;flex-shrink:0;';
+      agBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>';
+      agBtn.onclick = function() {
+        window.jarvisProtocolActive = !window.jarvisProtocolActive;
+        agBtn.classList.toggle('active-protocol', window.jarvisProtocolActive);
+      };
+      camBtn.parentElement.insertBefore(agBtn, camBtn.nextSibling);
+    }
+  }
+
+  var prevFetch3 = window.fetch;
+  window.fetch = async function(url, opts) {
+    var triggeredProtocol = false;
+    try {
+      var u = String(url || '');
+      if ((u.includes('pollinations.ai') || u.includes('groq.com') || u.includes('/api/chat')) && opts && opts.body) {
+        var body = JSON.parse(opts.body);
+        var msgs = body.messages;
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          var last = msgs[msgs.length - 1];
+          var rawTxt = (last && typeof last.content === 'string') ? last.content.split('=== [VICTOR')[0].trim() : '';
+          if ((window.jarvisProtocolActive || isMultiStepPrompt(rawTxt)) && !last.content.includes('JARVIS PROTOCOL:')) {
+            triggeredProtocol = true;
+            setHudStage(1);
+            try {
+              var pr = await prevFetch3('/api/jarvis-protocol', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ goal: rawTxt })
+              });
+              setHudStage(2);
+              if (pr.ok) {
+                var pd = await pr.json();
+                if (pd && pd.directive) {
+                  last.content = rawTxt + String.fromCharCode(10, 10) + pd.directive;
+                  opts.body = JSON.stringify(body);
+                }
+                if (pd && pd.imageUrl) window.lastProtocolImage = pd.imageUrl;
+              }
+            } catch (e) {}
+            setHudStage(3);
+          }
+        }
+      }
+    } catch (e) {}
+
+    var response = await prevFetch3.apply(this, arguments);
+
+    if (triggeredProtocol) {
+      setHudStage(4);
+      setTimeout(function() {
+        setHudStage(0);
+        if (window.lastProtocolImage) {
+          var imgUrl = window.lastProtocolImage;
+          window.lastProtocolImage = '';
+          var cb = document.getElementById('chat-box') || document.getElementById('chat-container') || document.getElementById('messages') || document.querySelector('main');
+          if (cb) {
+            var card = document.createElement('div');
+            card.className = 'v-asset-card';
+            card.innerHTML = '<div style="font-size:11px;color:#38bdf8;font-family:monospace;margin-bottom:6px;">[JARVIS PROTOCOL: AUTONOMOUS VISUAL ASSET]</div>' +
+              '<img src="' + imgUrl + '" alt="Generated Asset" />' +
+              '<a href="' + imgUrl + '" target="_blank" style="color:#94a3b8;font-size:12px;text-decoration:none;border:1px solid #334155;padding:4px 10px;border-radius:6px;display:inline-block;">↓ Open Full 8K Asset</a>';
+            cb.appendChild(card);
+            cb.scrollTop = cb.scrollHeight;
+          }
+        }
+      }, 900);
+    }
+    return response;
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountAgentButton);
+  } else {
+    mountAgentButton();
+  }
+  setTimeout(mountAgentButton, 800);
+})();
+</script>
 </body>
 </html>`;
 
 const FULL_HTML = Buffer.from(HTML_UI + HTML_SCRIPT, 'utf8');
 
 http.createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/api/jarvis-protocol') {
+    let b = '';
+    req.on('data', c => { b += c; });
+    req.on('end', async () => {
+      try {
+        const { goal } = JSON.parse(b || '{}');
+        const out = await runJarvisProtocolBackend(goal || '');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(out));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, directive: '' }));
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/vision-intel') {
     let b = '';
     req.on('data', c => { b += c; });
