@@ -1,6 +1,14 @@
 {
   "name": "victor-ai-ujjaval",
-  "version": "1.0.1",
+  "version": "1.0.2",
+  "type": "module",
+  "main": "cloud_server.mjs",
+  "bin": {
+    "victor": "./index.js"
+  },
+  "scripts": {
+    "start": "node cloud_server.mjs"
+  },
   "description": "Victor Core - The advanced cloud-accessible multi-modal web workspace and AI system.",
   "author": "Ujjaval <king-creator-max@users.noreply.github.com> (https://github.com/king-creator-max)",
   "repository": {
@@ -14,5 +22,8 @@
     "king-creator-max",
     "ai-workspace"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "mongodb": "^6.3.0"
+  }
 }
