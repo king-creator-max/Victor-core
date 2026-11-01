@@ -28,6 +28,75 @@ async function saveThreadsToAtlas() {
   } catch (e) {}
 }
 
+
+// === VICTOR PHASE 2: MULTIMODAL VISION ENGINE ===
+async function analyzeVictorImage(base64DataUrl, userPrompt) {
+  const promptText = (userPrompt || 'Inspect this image in detail.') +
+    '\n\nProvide a comprehensive technical breakdown: transcribe all visible text/code/equations accurately, identify any hardware/circuit components, UI elements, or diagrams, and directly answer Sir.';
+
+  const vCap = (p, ms = 12000) => Promise.race([p, new Promise(r => setTimeout(() => r(''), ms))]);
+
+  // Engine 1: Pollinations OpenAI Vision (Zero API Key Required)
+  const pollVision = vCap((async () => {
+    try {
+      const r = await fetch('https://text.pollinations.ai/openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'openai',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: promptText },
+              { type: 'image_url', image_url: { url: base64DataUrl } }
+            ]
+          }]
+        })
+      });
+      if (!r.ok) return '';
+      const j = await r.json();
+      return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    } catch (e) { return ''; }
+  })(), 11500);
+
+  // Engine 2: Groq Multimodal Vision (if GROQ_API_KEY is configured)
+  const groqVision = vCap((async () => {
+    const gKey = process.env.GROQ_API_KEY;
+    if (!gKey) return '';
+    try {
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + gKey },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: promptText },
+              { type: 'image_url', image_url: { url: base64DataUrl } }
+            ]
+          }],
+          max_tokens: 900
+        })
+      });
+      if (!r.ok) return '';
+      const j = await r.json();
+      return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    } catch (e) { return ''; }
+  })(), 10000);
+
+  const [pOut, gOut] = await Promise.all([pollVision, groqVision]);
+  const combined = [gOut ? '[GROQ VISION SCAN]:\n' + gOut : '', pOut ? '[OPENAI VISION SCAN]:\n' + pOut : ''].filter(Boolean).join('\n\n');
+  return {
+    ok: true,
+    visionIntel: [
+      '=== [VICTOR MULTIMODAL VISION EYE TELEMETRY] ===',
+      '[SYSTEM MANDATE: You HAVE just inspected Sir\'s attached photo/screenshot via the VICTOR Multimodal Vision Eye. NEVER say you cannot see images. Use the verified visual scan below to answer Sir directly and precisely.]',
+      combined || 'Image received and verified. Respond to Sir\'s visual query.'
+    ].join('\n\n')
+  };
+}
+
 // === VICTOR MASTER CHROMIUM ENGINE ===
 // === VICTOR OMNI-CORE WEB ENGINE v6.0 ===
 const JARVIS_KNOWN_SITES = {
@@ -1091,12 +1160,288 @@ const HTML_SCRIPT = `
   });
 })();
 </script>
+<style>
+#v-sandbox-modal { position:fixed; inset:0; background:rgba(5,8,15,0.96); z-index:10000; display:none; flex-direction:column; font-family:sans-serif; }
+#v-sandbox-modal.open { display:flex; }
+.v-sb-hdr { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#0f172a; border-bottom:1px solid #1e293b; color:#38bdf8; font-size:13px; font-weight:700; }
+.v-sb-actions { display:flex; gap:6px; align-items:center; }
+.v-sb-btn { background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:7px; padding:5px 10px; font-size:12px; cursor:pointer; font-weight:600; }
+.v-sb-btn.primary { background:#0284c7; border-color:#38bdf8; color:#fff; }
+#v-sb-frame { flex:1; width:100%; border:none; background:#fff; }
+#v-sb-editor { display:none; flex:1; width:100%; background:#090d16; color:#38bdf8; border:none; padding:14px; font-family:monospace; font-size:13px; box-sizing:border-box; outline:none; resize:none; }
+.v-code-bar { display:flex; gap:8px; margin-top:10px; padding-top:8px; border-top:1px solid #1e293b; flex-wrap:wrap; }
+.v-launch-btn { background:linear-gradient(135deg,#0284c7,#2563eb); color:#fff; border:none; border-radius:8px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
+.v-dl-btn { background:#1e293b; color:#38bdf8; border:1px solid #334155; border-radius:8px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; }
+#v-vision-chip { position:fixed; bottom:74px; left:16px; background:#0f172a; border:1px solid #38bdf8; border-radius:12px; padding:6px 10px; display:none; align-items:center; gap:8px; z-index:9000; box-shadow:0 6px 20px rgba(0,0,0,0.6); color:#f8fafc; font-size:12px; }
+#v-vision-chip.active { display:flex; }
+#v-vision-thumb { width:38px; height:38px; object-fit:cover; border-radius:6px; border:1px solid #334155; }
+.v-cam-trigger { background:#151c28; color:#38bdf8; border:1px solid #1e293b; border-radius:10px; padding:6px 10px; font-size:15px; cursor:pointer; margin-right:6px; flex-shrink:0; }
+</style>
+
+<input type="file" id="v-cam-input" accept="image/*" style="display:none;" />
+
+<div id="v-vision-chip">
+  <img id="v-vision-thumb" src="" alt="Vision" />
+  <div>
+    <div style="font-weight:700;color:#38bdf8;">VISION EYE READY</div>
+    <div id="v-vision-meta" style="font-size:10px;color:#94a3b8;">Compressed</div>
+  </div>
+  <button onclick="window.clearVictorVision()" style="background:#3f1d28;color:#fda4af;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;font-size:11px;">✕</button>
+</div>
+
+<div id="v-sandbox-modal">
+  <div class="v-sb-hdr">
+    <span>⚡ VICTOR LIVE SANDBOX</span>
+    <div class="v-sb-actions">
+      <button class="v-sb-btn" onclick="window.toggleSandboxCode()">&lt;/&gt; Code</button>
+      <button class="v-sb-btn primary" onclick="window.runSandboxCode()">▶ Run</button>
+      <button class="v-sb-btn" onclick="window.downloadSandboxHtml()">⬇️ .HTML</button>
+      <button class="v-sb-btn" style="background:#3f1d28;color:#fda4af;" onclick="document.getElementById('v-sandbox-modal').classList.remove('open')">✕</button>
+    </div>
+  </div>
+  <textarea id="v-sb-editor" placeholder="Paste or edit HTML / CSS / JS code here..."></textarea>
+  <iframe id="v-sb-frame" sandbox="allow-scripts allow-modals allow-forms allow-popups allow-same-origin"></iframe>
+</div>
+
+<script>
+(function(){
+  window.pendingVictorImage = null;
+  window.savedCodeSnippets = [];
+  var BT = String.fromCharCode(96);
+  var FENCE = BT + BT + BT;
+
+  // --- 1. LIVE CODE SANDBOX CONTROLLER ---
+  window.openVictorSandbox = function(rawCode) {
+    var modal = document.getElementById('v-sandbox-modal');
+    var editor = document.getElementById('v-sb-editor');
+    var frame = document.getElementById('v-sb-frame');
+    if (!modal || !editor || !frame) return;
+    var html = String(rawCode || editor.value || '').trim();
+    if (!html) {
+      html = '<!DOCTYPE html><html><head><style>body{background:#0b0f17;color:#38bdf8;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:90vh;margin:0;}</style></head><body><h2>⚡ VICTOR Live Sandbox Ready</h2></body></html>';
+    } else if (!html.toLowerCase().includes('<html') && !html.toLowerCase().includes('<!doctype') && !html.toLowerCase().includes('<body') && !html.toLowerCase().includes('<div') && !html.toLowerCase().includes('<canvas') && !html.toLowerCase().includes('<style')) {
+      html = '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#0f172a;color:#f8fafc;font-family:sans-serif;padding:16px;}</style></head><body><div id="app"></div><' + 'script>' + html + '<' + '/script></body></html>';
+    }
+    editor.value = html;
+    frame.srcdoc = html;
+    modal.classList.add('open');
+  };
+
+  window.openSnippetByIndex = function(idx) {
+    if (window.savedCodeSnippets[idx]) window.openVictorSandbox(window.savedCodeSnippets[idx]);
+  };
+
+  window.downloadSnippetByIndex = function(idx) {
+    if (window.savedCodeSnippets[idx]) window.downloadHtmlString(window.savedCodeSnippets[idx]);
+  };
+
+  window.toggleSandboxCode = function() {
+    var ed = document.getElementById('v-sb-editor');
+    var fr = document.getElementById('v-sb-frame');
+    if (ed.style.display === 'block') {
+      ed.style.display = 'none';
+      fr.style.display = 'block';
+    } else {
+      ed.style.display = 'block';
+      fr.style.display = 'none';
+    }
+  };
+
+  window.runSandboxCode = function() {
+    var ed = document.getElementById('v-sb-editor');
+    var fr = document.getElementById('v-sb-frame');
+    ed.style.display = 'none';
+    fr.style.display = 'block';
+    fr.srcdoc = ed.value;
+  };
+
+  window.downloadHtmlString = function(str) {
+    var blob = new Blob([str], { type: 'text/html' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'victor_app_' + Date.now() + '.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  window.downloadSandboxHtml = function() {
+    var ed = document.getElementById('v-sb-editor');
+    window.downloadHtmlString(ed ? ed.value : '');
+  };
+
+  function extractRunnableHtml(txt) {
+    if (!txt) return '';
+    var s = String(txt);
+    var p1 = s.indexOf(FENCE + 'html');
+    if (p1 !== -1) {
+      var start = s.indexOf(String.fromCharCode(10), p1);
+      var end = s.indexOf(FENCE, start + 1);
+      if (start !== -1 && end !== -1) return s.slice(start + 1, end).trim();
+    }
+    var docIdx = s.toLowerCase().indexOf('<!doctype html>');
+    if (docIdx !== -1) {
+      var endHtml = s.toLowerCase().lastIndexOf('</html>');
+      return endHtml !== -1 ? s.slice(docIdx, endHtml + 7) : s.slice(docIdx);
+    }
+    var hIdx = s.toLowerCase().indexOf('<html');
+    if (hIdx !== -1) {
+      var endH = s.toLowerCase().lastIndexOf('</html>');
+      return endH !== -1 ? s.slice(hIdx, endH + 7) : s.slice(hIdx);
+    }
+    return '';
+  }
+
+  function scanForCodeBlocks() {
+    var nodes = document.querySelectorAll('pre, div, section, article');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.dataset && el.dataset.vSandboxChecked) continue;
+      if (el.children && el.children.length > 6) continue;
+      var txt = el.innerText || el.textContent || '';
+      if (txt.length < 40) continue;
+      var runnable = extractRunnableHtml(txt);
+      if (!runnable && el.tagName === 'PRE' && (txt.includes('<div') || txt.includes('<script') || txt.includes('<canvas') || txt.includes('function '))) {
+        runnable = txt.trim();
+      }
+      if (runnable) {
+        el.dataset.vSandboxChecked = '1';
+        var idx = window.savedCodeSnippets.push(runnable) - 1;
+        var bar = document.createElement('div');
+        bar.className = 'v-code-bar';
+        bar.innerHTML = '<button class="v-launch-btn" onclick="window.openSnippetByIndex(' + idx + ')">🚀 Launch Live Preview</button>' +
+          '<button class="v-dl-btn" onclick="window.downloadSnippetByIndex(' + idx + ')">⬇️ Download .HTML</button>';
+        el.appendChild(bar);
+      }
+    }
+  }
+  setInterval(scanForCodeBlocks, 1500);
+
+  // --- 2. MULTIMODAL VISION CAMERA CONTROLLER ---
+  window.clearVictorVision = function() {
+    window.pendingVictorImage = null;
+    var chip = document.getElementById('v-vision-chip');
+    if (chip) chip.classList.remove('active');
+    var inp = document.getElementById('v-cam-input');
+    if (inp) inp.value = '';
+  };
+
+  function compressImageFile(file) {
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var img = new Image();
+      img.onload = function() {
+        var maxDim = 850;
+        var w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        var ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        var dataUrl = c.toDataURL('image/jpeg', 0.72);
+        window.pendingVictorImage = dataUrl;
+        var kb = Math.round((dataUrl.length * 0.75) / 1024);
+        var thumb = document.getElementById('v-vision-thumb');
+        var meta = document.getElementById('v-vision-meta');
+        var chip = document.getElementById('v-vision-chip');
+        if (thumb) thumb.src = dataUrl;
+        if (meta) meta.innerText = w + 'x' + h + ' • ' + kb + ' KB (0 Server RAM)';
+        if (chip) chip.classList.add('active');
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Intercept outgoing chat fetch when a Vision image is attached
+  var prevFetch2 = window.fetch;
+  window.fetch = async function(url, opts) {
+    try {
+      var u = String(url || '');
+      if (window.pendingVictorImage && (u.includes('pollinations.ai') || u.includes('groq.com') || u.includes('/api/chat')) && opts && opts.body) {
+        var imgData = window.pendingVictorImage;
+        window.clearVictorVision();
+        var body = JSON.parse(opts.body);
+        var msgs = body.messages;
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          var last = msgs[msgs.length - 1];
+          var userTxt = (last && typeof last.content === 'string') ? last.content : 'Analyze this image.';
+          try {
+            var vr = await prevFetch2('/api/vision-intel', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image: imgData, prompt: userTxt })
+            });
+            if (vr.ok) {
+              var vd = await vr.json();
+              if (vd && vd.visionIntel) {
+                last.content = userTxt + String.fromCharCode(10, 10) + vd.visionIntel;
+                opts.body = JSON.stringify(body);
+              }
+            }
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+    return prevFetch2.apply(this, arguments);
+  };
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var camInput = document.getElementById('v-cam-input');
+    if (camInput) {
+      camInput.addEventListener('change', function(e) {
+        if (e.target.files && e.target.files[0]) compressImageFile(e.target.files[0]);
+      });
+    }
+    var hdr = document.querySelector('header') || document.body;
+    var sbBtn = document.createElement('button');
+    sbBtn.className = 'v-hdr-btn';
+    sbBtn.innerHTML = '⚡ Sandbox';
+    sbBtn.onclick = function() { window.openVictorSandbox(''); };
+    hdr.insertBefore(sbBtn, hdr.firstChild.nextSibling);
+
+    var txtInput = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i], #user-input, #chat-input');
+    if (txtInput && txtInput.parentElement) {
+      var camBtn = document.createElement('button');
+      camBtn.type = 'button';
+      camBtn.className = 'v-cam-trigger';
+      camBtn.title = 'VICTOR Vision Eye (Camera / Screenshot)';
+      camBtn.innerHTML = '📷';
+      camBtn.onclick = function() { document.getElementById('v-cam-input').click(); };
+      txtInput.parentElement.insertBefore(camBtn, txtInput);
+    }
+  });
+})();
+</script>
 </body>
 </html>`;
 
 const FULL_HTML = Buffer.from(HTML_UI + HTML_SCRIPT, 'utf8');
 
 http.createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/api/vision-intel') {
+    let b = '';
+    req.on('data', c => { b += c; });
+    req.on('end', async () => {
+      try {
+        const { image, prompt } = JSON.parse(b || '{}');
+        if (!image) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ ok: false, visionIntel: '' }));
+        }
+        const out = await analyzeVictorImage(image, prompt || '');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(out));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, visionIntel: '' }));
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/victor-os') {
     let b = '';
     req.on('data', c => { b += c; });
