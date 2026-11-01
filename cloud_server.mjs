@@ -1754,6 +1754,186 @@ const HTML_SCRIPT = `
   setTimeout(hideUnwantedButtons, 500);
 })();
 </script>
+<script>
+(function(){
+  window.initialVictorChatHtml = null;
+
+  // 1. Universal resolver for VICTOR's chat messages container
+  window.findVictorChatBox = function() {
+    var direct = document.getElementById('chat-box') ||
+      document.getElementById('chat-container') ||
+      document.getElementById('messages') ||
+      document.getElementById('chat') ||
+      document.getElementById('chat-messages') ||
+      document.getElementById('chat-area') ||
+      document.getElementById('chatArea') ||
+      document.querySelector('main');
+    if (direct) return direct;
+
+    var hdr = document.querySelector('header') || document.querySelector('[class*="header" i]');
+    var inp = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i], #user-input, #chat-input');
+    var allDivs = [...document.querySelectorAll('body > div, #app > div, #root > div')];
+    for (var i = 0; i < allDivs.length; i++) {
+      var d = allDivs[i];
+      if (d.id === 'v-drawer' || d.id === 'v-sandbox-modal' || d.id === 'v-jarvis-hud' || d.id === 'v-vision-chip') continue;
+      if (hdr && (d === hdr || d.contains(hdr))) continue;
+      if (inp && (d === inp || d.contains(inp))) continue;
+      return d;
+    }
+    return null;
+  };
+
+  // 2. Hide Top Mic, Top '+', and Bottom Mic buttons
+  function cleanAllMicAndPlusButtons() {
+    var hdr = document.querySelector('header') || document.querySelector('[class*="header" i]');
+    if (hdr) {
+      var allHdrBtns = [...hdr.querySelectorAll('button')];
+      var nativeBtns = allHdrBtns.filter(function(b) {
+        return b.id !== 'v-svg-chats' && b.id !== 'v-svg-sb';
+      });
+      // Native button 0 is Top Mic; last native button is Top '+'
+      if (nativeBtns.length >= 1 && nativeBtns[0]) {
+        nativeBtns[0].style.setProperty('display', 'none', 'important');
+      }
+      if (nativeBtns.length >= 2 && nativeBtns[nativeBtns.length - 1]) {
+        nativeBtns[nativeBtns.length - 1].style.setProperty('display', 'none', 'important');
+      }
+      // Also hide any header button containing a microphone SVG path
+      nativeBtns.forEach(function(b) {
+        var h = b.innerHTML.toLowerCase();
+        if (h.includes('m12 1a3') || h.includes('12 2a3') || h.includes('19 10v2') || h.includes('m9 9v3')) {
+          b.style.setProperty('display', 'none', 'important');
+        }
+      });
+    }
+
+    // Hide bottom prompt bar Mic button (next to Send arrow)
+    var txtInput = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i], #user-input, #chat-input');
+    if (txtInput && txtInput.parentElement) {
+      var rowBtns = [...txtInput.parentElement.querySelectorAll('button')];
+      if (rowBtns.length >= 2) {
+        var sendBtn = rowBtns[rowBtns.length - 1];
+        rowBtns.forEach(function(b) {
+          if (b !== sendBtn && b.id !== 'v-svg-cam' && b.id !== 'v-svg-agent') {
+            b.style.setProperty('display', 'none', 'important');
+          }
+        });
+      }
+    }
+  }
+
+  // 3. Scrape visible DOM messages if curThreadMsgs missed any
+  function scrapeVisibleChatMessages(cb) {
+    if (!cb) return [];
+    var items = [...cb.children].filter(function(el) {
+      var t = (el.innerText || '').trim();
+      return t.length > 0 && t !== 'V';
+    });
+    var msgs = [];
+    items.forEach(function(el, idx) {
+      var txt = (el.innerText || '').trim();
+      if (txt) {
+        msgs.push({ role: idx % 2 === 0 ? 'user' : 'assistant', content: txt });
+      }
+    });
+    return msgs;
+  }
+
+  // 4. Upgraded "+ New Chat Thread" & Thread Loader
+  function bindNewChatSystem() {
+    var cb = window.findVictorChatBox();
+    if (cb && window.initialVictorChatHtml === null) {
+      window.initialVictorChatHtml = cb.innerHTML;
+    }
+
+    window.startNewVictorChat = async function() {
+      var chatEl = window.findVictorChatBox();
+      if ((!window.curThreadMsgs || window.curThreadMsgs.length === 0) && chatEl) {
+        var scraped = scrapeVisibleChatMessages(chatEl);
+        if (scraped.length > 0) window.curThreadMsgs = scraped;
+      }
+
+      // Save current thread to Atlas before resetting if it has messages
+      if (window.curThreadMsgs && window.curThreadMsgs.length > 0 && window.syncVictorOS) {
+        var firstTitle = String(window.curThreadMsgs[0].content || 'Chat').slice(0, 36);
+        await window.syncVictorOS({
+          action: 'save_thread',
+          thread: {
+            id: window.curThreadId || ('th_' + Date.now()),
+            title: firstTitle,
+            updatedAt: Date.now(),
+            messages: window.curThreadMsgs
+          }
+        });
+      }
+
+      // Create fresh thread ID & clear memory arrays
+      window.curThreadId = 'th_' + Date.now();
+      localStorage.setItem('victor_active_tid', window.curThreadId);
+      window.curThreadMsgs = [];
+      if (Array.isArray(window.messages)) window.messages.length = 0;
+      if (Array.isArray(window.chatHistory)) window.chatHistory.length = 0;
+
+      // Reset chat screen back to clean initial state
+      if (chatEl) {
+        chatEl.innerHTML = window.initialVictorChatHtml || '';
+      }
+
+      // Close Chat Logs drawer
+      var dr = document.getElementById('v-drawer');
+      if (dr) dr.classList.remove('open');
+
+      // Visual confirmation in input bar
+      var inp = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i], #user-input, #chat-input');
+      if (inp) {
+        inp.value = '';
+        var origPh = inp.getAttribute('placeholder') || 'Message VICTOR...';
+        inp.setAttribute('placeholder', 'New chat thread ready, Sir...');
+        inp.focus();
+        setTimeout(function() { inp.setAttribute('placeholder', origPh); }, 2500);
+      }
+
+      if (window.syncVictorOS) window.syncVictorOS({ action: 'status' });
+    };
+
+    window.loadVictorThread = function(id) {
+      var list = window.allVictorThreads || [];
+      var t = list.find(function(x) { return x.id === id; });
+      if (!t) return;
+      window.curThreadId = t.id;
+      localStorage.setItem('victor_active_tid', t.id);
+      window.curThreadMsgs = t.messages || [];
+      var chatEl = window.findVictorChatBox();
+      if (chatEl) {
+        chatEl.innerHTML = window.curThreadMsgs.map(function(m) {
+          var isU = m.role === 'user';
+          var bg = isU ? '#1e293b' : '#0f172a';
+          var align = isU ? 'flex-end' : 'flex-start';
+          return '<div style="display:flex;justify-content:' + align + ';margin:8px 0;">' +
+            '<div style="max-width:85%;background:' + bg + ';color:#f8fafc;padding:12px 14px;border-radius:14px;border:1px solid #334155;white-space:pre-wrap;font-size:14px;">' +
+            String(m.content || '').replace(/</g, '&lt;') + '</div></div>';
+        }).join('');
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+      var dr = document.getElementById('v-drawer');
+      if (dr) dr.classList.remove('open');
+      if (window.syncVictorOS) window.syncVictorOS({ action: 'status' });
+    };
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      cleanAllMicAndPlusButtons();
+      bindNewChatSystem();
+    });
+  } else {
+    cleanAllMicAndPlusButtons();
+    bindNewChatSystem();
+  }
+  setTimeout(cleanAllMicAndPlusButtons, 600);
+  setTimeout(bindNewChatSystem, 600);
+})();
+</script>
 </body>
 </html>`;
 
