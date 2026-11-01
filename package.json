@@ -15,6 +15,7 @@
     "type": "git",
     "url": "https://github.com/king-creator-max/victor-ai-ujjaval.git"
   },
+  "homepage": "https://victor-core.onrender.com",
   "keywords": [
     "victor-core",
     "victor-ai",
@@ -24,7 +25,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@gradio/client": "^1.19.1",
-    "mongodb": "^7.7.0"
+    "@gradio/client": "^1.6.0",
+    "mongodb": "^6.3.0"
   }
 }
