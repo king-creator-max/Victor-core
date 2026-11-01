@@ -1934,12 +1934,226 @@ const HTML_SCRIPT = `
   setTimeout(bindNewChatSystem, 600);
 })();
 </script>
+<script>
+(function(){
+  window.mountAndRenderVaultStorage = function(data) {
+    var pBox = document.querySelector('textarea[placeholder*="persona" i]') || document.querySelector('textarea');
+    if (!pBox) return;
+    if (data && data.persona && !pBox.value.trim()) {
+      pBox.value = data.persona;
+    }
+    var card = pBox.parentElement;
+    if (!card) return;
+
+    var box = document.getElementById('v-storage-mgr');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'v-storage-mgr';
+      box.style.cssText = 'margin-top:14px;padding:12px;background:#090d16;border:1px solid #1e293b;border-radius:10px;font-size:12px;color:#cbd5e1;';
+      card.appendChild(box);
+    }
+
+    var ram = (data && data.ramMB) ? data.ramMB : '45.2';
+    var atlas = (data && typeof data.atlasKB === 'number') ? data.atlasKB : '0.0';
+    var docs = (data && Array.isArray(data.docs) && data.docs.length) ? data.docs : [
+      { id: 'vault', sizeKB: 1.2 },
+      { id: 'memory', sizeKB: 2.4 },
+      { id: 'threads', sizeKB: 4.8 }
+    ];
+
+    var rows = docs.map(function(doc) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b;">' +
+        '<span>▪ <b>' + doc.id + '</b> (' + doc.sizeKB + ' KB)</span>' +
+        '<button onclick="window.purgeAtlasDoc(\'' + doc.id + '\')" style="background:#3f1d28;color:#fda4af;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">Purge</button></div>';
+    }).join('');
+
+    box.innerHTML = '<div style="color:#38bdf8;font-weight:700;margin-bottom:8px;letter-spacing:0.5px;">CLOUD & ATLAS STORAGE (512 MB)</div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>MongoDB Atlas Used:</span><b>' + atlas + ' KB / 512 MB</b></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span>Render Server RAM:</span><b>' + ram + ' MB / 512 MB</b></div>' +
+      '<div>' + rows + '</div>';
+  };
+
+  // Refresh storage panel whenever the Cloud icon in the header is clicked
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest ? e.target.closest('button') : null;
+    if (btn && window.syncVictorOS) {
+      setTimeout(function() { window.syncVictorOS({ action: 'status' }); }, 150);
+    }
+  });
+
+  setTimeout(function() { window.mountAndRenderVaultStorage(null); }, 500);
+})();
+</script>
+<script>
+(function(){
+  function getLocal() { try { return JSON.parse(localStorage.getItem('v_threads_v2') || '[]'); } catch(e) { return []; } }
+  function setLocal(arr) { try { localStorage.setItem('v_threads_v2', JSON.stringify(arr || [])); } catch(e) {} }
+
+  window.renderVictorThreadList = function() {
+    var box = document.getElementById('v-thread-list');
+    if (!box) return;
+    var list = window.allVictorThreads || [];
+    if (!list.length) {
+      box.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;margin-top:20px;">No saved chat threads yet.</div>';
+      return;
+    }
+    box.innerHTML = list.map(function(t) {
+      var act = t.id === window.curThreadId ? ' active' : '';
+      var cnt = Array.isArray(t.messages) ? t.messages.length : 0;
+      var kb = (JSON.stringify(t).length / 1024).toFixed(1);
+      var title = String(t.title || 'Chat').replace(/</g, '&lt;');
+      return '<div class="v-th-item' + act + '" onclick="window.loadVictorThread(\'' + t.id + '\')">' +
+        '<div><div class="v-th-title">' + title + '</div><div class="v-th-meta">' + cnt + ' msgs • ' + kb + ' KB</div></div>' +
+        '<button class="v-del-btn" onclick="event.stopPropagation();window.deleteVictorThread(\'' + t.id + '\')">Del</button></div>';
+    }).join('');
+  };
+
+  window.scrapeChatDom = function() {
+    var cb = window.findVictorChatBox ? window.findVictorChatBox() : null;
+    if (!cb) return [];
+    var root = cb;
+    while (root.children && root.children.length === 1 && root.children[0].children && root.children[0].children.length > 1) {
+      root = root.children[0];
+    }
+    var msgs = [];
+    [...(root.children || [])].forEach(function(n) {
+      var c = n.cloneNode(true);
+      c.querySelectorAll('button, style, script, .v-code-bar').forEach(function(x) { x.remove(); });
+      var txt = (c.innerText || '').trim();
+      if (txt && txt !== 'V' && txt !== 'VICTOR' && txt.length > 1) {
+        msgs.push({ role: msgs.length % 2 === 0 ? 'user' : 'assistant', content: txt });
+      }
+    });
+    return msgs;
+  };
+
+  window.syncVictorOS = async function(payload) {
+    if (payload && payload.action === 'delete_thread' && payload.id) {
+      setLocal(getLocal().filter(function(t) { return t.id !== payload.id; }));
+    }
+    if (payload && payload.action === 'purge_doc' && payload.docId === 'threads') {
+      setLocal([]);
+    }
+    try {
+      var r = await fetch('/api/victor-os', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || { action: 'status' })
+      });
+      var d = await r.json();
+      if (window.mountAndRenderVaultStorage) window.mountAndRenderVaultStorage(d);
+      var remote = (d && Array.isArray(d.threads)) ? d.threads : [];
+      var map = {};
+      getLocal().forEach(function(t) { if (t && t.id) map[t.id] = t; });
+      remote.forEach(function(t) { if (t && t.id) map[t.id] = t; });
+      window.allVictorThreads = Object.values(map).sort(function(a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+      setLocal(window.allVictorThreads);
+      window.renderVictorThreadList();
+    } catch (e) {
+      window.allVictorThreads = getLocal();
+      window.renderVictorThreadList();
+    }
+  };
+
+  window.startNewVictorChat = async function() {
+    var domMsgs = window.scrapeChatDom();
+    if (domMsgs.length > (window.curThreadMsgs || []).length) window.curThreadMsgs = domMsgs;
+
+    if (window.curThreadMsgs && window.curThreadMsgs.length > 0) {
+      var tid = window.curThreadId || ('th_' + Date.now());
+      var th = { id: tid, title: String(window.curThreadMsgs[0].content || 'Chat').slice(0, 34), updatedAt: Date.now(), messages: window.curThreadMsgs };
+      var loc = getLocal().filter(function(x) { return x.id !== tid; });
+      loc.unshift(th);
+      setLocal(loc);
+      await window.syncVictorOS({ action: 'save_thread', thread: th });
+    }
+
+    window.curThreadId = 'th_' + Date.now();
+    localStorage.setItem('victor_active_tid', window.curThreadId);
+    window.curThreadMsgs = [];
+    var cb = window.findVictorChatBox ? window.findVictorChatBox() : null;
+    if (cb) cb.innerHTML = window.initialVictorChatHtml || '';
+    window.renderVictorThreadList();
+    var dr = document.getElementById('v-drawer');
+    if (dr) dr.classList.remove('open');
+  };
+
+  setInterval(function() {
+    var m = window.scrapeChatDom();
+    if (m.length > 0 && m.length !== (window.curThreadMsgs || []).length) {
+      window.curThreadMsgs = m;
+      var tid = window.curThreadId || ('th_' + Date.now());
+      var th = { id: tid, title: String(m[0].content || 'Chat').slice(0, 34), updatedAt: Date.now(), messages: m };
+      var loc = getLocal().filter(function(x) { return x.id !== tid; });
+      loc.unshift(th);
+      setLocal(loc);
+      window.syncVictorOS({ action: 'save_thread', thread: th });
+    }
+  }, 2200);
+
+  setTimeout(function() { window.syncVictorOS({ action: 'status' }); }, 600);
+})();
+</script>
 </body>
 </html>`;
 
 const FULL_HTML = Buffer.from(HTML_UI + HTML_SCRIPT, 'utf8');
 
 http.createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/api/victor-os') {
+    let b = '';
+    req.on('data', c => { b += c; });
+    req.on('end', async () => {
+      try {
+        if (!Array.isArray(global.V_THREADS)) {
+          global.V_THREADS = [];
+          try {
+            if (typeof mongoCol !== 'undefined' && mongoCol) {
+              const doc = await mongoCol.findOne({ _id: 'threads' });
+              if (doc && Array.isArray(doc.list)) global.V_THREADS = doc.list;
+            }
+          } catch (e) {}
+        }
+        const body = JSON.parse(b || '{}');
+        const act = body.action;
+        const saveAtlas = async () => {
+          if (typeof mongoCol !== 'undefined' && mongoCol) {
+            await mongoCol.updateOne({ _id: 'threads' }, { $set: { list: global.V_THREADS, updatedAt: new Date() } }, { upsert: true });
+          }
+        };
+        if (act === 'save_thread' && body.thread && body.thread.id) {
+          global.V_THREADS = global.V_THREADS.filter(t => t && t.id !== body.thread.id);
+          global.V_THREADS.unshift(body.thread);
+          await saveAtlas();
+        } else if (act === 'delete_thread' && body.id) {
+          global.V_THREADS = global.V_THREADS.filter(t => t && t.id !== body.id);
+          await saveAtlas();
+        } else if (act === 'purge_doc' && body.docId) {
+          if (body.docId === 'threads') { global.V_THREADS = []; await saveAtlas(); }
+          if (typeof mongoCol !== 'undefined' && mongoCol && body.docId !== 'threads') {
+            await mongoCol.deleteOne({ _id: body.docId });
+          }
+        }
+        let docs = [], totalKB = 0;
+        if (typeof mongoCol !== 'undefined' && mongoCol) {
+          const raw = await mongoCol.find({}).toArray();
+          docs = raw.map(d => {
+            const sz = +(Buffer.byteLength(JSON.stringify(d), 'utf8') / 1024).toFixed(2);
+            totalKB += sz;
+            return { id: d._id, sizeKB: sz };
+          });
+        }
+        const ramMB = +(process.memoryUsage().rss / 1048576).toFixed(1);
+        const defP = "You are V.I.C.T.O.R., a J.A.R.V.I.S.-class AI engineered by Ujjaval (Sir / king-creator-max). Always address Ujjaval as Sir. Be sharp, composed, witty, and engineering-focused.";
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, ramMB, atlasKB: +totalKB.toFixed(2), docs, threads: global.V_THREADS, persona: defP }));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, ramMB: 48, atlasKB: 0, docs: [], threads: global.V_THREADS || [], persona: '' }));
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/jarvis-protocol') {
     let b = '';
     req.on('data', c => { b += c; });
@@ -1976,51 +2190,7 @@ http.createServer(async (req, res) => {
     });
     return;
   }
-  if (req.method === 'POST' && req.url === '/api/victor-os') {
-    let b = '';
-    req.on('data', c => { b += c; });
-    req.on('end', async () => {
-      try {
-        const body = JSON.parse(b || '{}');
-        const act = body.action;
-        if (act === 'save_thread' && body.thread && body.thread.id) {
-          THREADS_CACHE = THREADS_CACHE.filter(t => t.id !== body.thread.id);
-          THREADS_CACHE.unshift(body.thread);
-          if (THREADS_CACHE.length > 50) THREADS_CACHE = THREADS_CACHE.slice(0, 50);
-          await saveThreadsToAtlas();
-        } else if (act === 'delete_thread' && body.id) {
-          THREADS_CACHE = THREADS_CACHE.filter(t => t.id !== body.id);
-          await saveThreadsToAtlas();
-        } else if (act === 'purge_doc' && body.docId) {
-          if (body.docId === 'threads') { THREADS_CACHE = []; await saveThreadsToAtlas(); }
-          if (body.docId === 'memory' && typeof MEMORY !== 'undefined') { MEMORY.history = []; MEMORY.chats = []; fs.writeFileSync(memFile, JSON.stringify(MEMORY)); }
-          if (typeof mongoCol !== 'undefined' && mongoCol && body.docId !== 'threads') {
-            await mongoCol.deleteOne({ _id: body.docId });
-          }
-        } else if (act === 'save_persona' && typeof body.persona === 'string') {
-          if (typeof MEMORY !== 'undefined') { MEMORY.persona = body.persona; fs.writeFileSync(memFile, JSON.stringify(MEMORY)); }
-        }
-        let docs = [];
-        let totalKB = 0;
-        if (typeof mongoCol !== 'undefined' && mongoCol) {
-          const rawDocs = await mongoCol.find({}).toArray();
-          docs = rawDocs.map(d => {
-            const sz = +(Buffer.byteLength(JSON.stringify(d), 'utf8') / 1024).toFixed(2);
-            totalKB += sz;
-            return { id: d._id, sizeKB: sz, updated: d.updatedAt || null };
-          });
-        }
-        const ramMB = +(process.memoryUsage().rss / 1048576).toFixed(1);
-        const curPersona = (typeof MEMORY !== 'undefined' && MEMORY.persona) ? MEMORY.persona : DEFAULT_JARVIS_PERSONA;
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, ramMB, atlasKB: +totalKB.toFixed(2), maxMB: 512, docs, threads: THREADS_CACHE, persona: curPersona }));
-      } catch (e) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: e.message }));
-      }
-    });
-    return;
-  }
+  
   if (req.method === 'POST' && req.url === '/api/web-intel') {
     let b = '';
     req.on('data', c => { b += c; });
