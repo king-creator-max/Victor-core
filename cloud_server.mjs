@@ -1062,10 +1062,10 @@ const HTML_SCRIPT = `
     if (!g) return;
     const docsHtml = (d.docs || []).map(function(doc) {
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #1e293b;">' +
-        '<span>📦 <b>' + doc.id + '</b> (' + doc.sizeKB + ' KB)</span>' +
+        '<span>▪ <b>' + doc.id + '</b> (' + doc.sizeKB + ' KB)</span>' +
         '<button onclick="window.purgeAtlasDoc(\'' + doc.id + '\')" style="background:#3f1d28;color:#fda4af;border:none;border-radius:5px;padding:3px 7px;font-size:11px;cursor:pointer;">Purge</button></div>';
     }).join('');
-    g.innerHTML = '<div style="color:#38bdf8;font-weight:700;margin-bottom:6px;">⚡ 512 MB CLOUD & ATLAS STORAGE MANAGER</div>' +
+    g.innerHTML = '<div style="color:#38bdf8;font-weight:700;margin-bottom:6px;">CLOUD & ATLAS STORAGE TELEMETRY (512 MB)</div>' +
       '<div style="margin-bottom:4px;">MongoDB Atlas Used: <b>' + d.atlasKB + ' KB</b> / 512 MB</div>' +
       '<div style="margin-bottom:8px;">Render Server RAM: <b>' + d.ramMB + ' MB</b> / 512 MB</div>' +
       '<div>' + docsHtml + '</div>';
@@ -1191,11 +1191,11 @@ const HTML_SCRIPT = `
 
 <div id="v-sandbox-modal">
   <div class="v-sb-hdr">
-    <span>⚡ VICTOR LIVE SANDBOX</span>
+    <span>&lt;/&gt; VICTOR LIVE SANDBOX</span>
     <div class="v-sb-actions">
       <button class="v-sb-btn" onclick="window.toggleSandboxCode()">&lt;/&gt; Code</button>
       <button class="v-sb-btn primary" onclick="window.runSandboxCode()">▶ Run</button>
-      <button class="v-sb-btn" onclick="window.downloadSandboxHtml()">⬇️ .HTML</button>
+      <button class="v-sb-btn" onclick="window.downloadSandboxHtml()">↓ .HTML</button>
       <button class="v-sb-btn" style="background:#3f1d28;color:#fda4af;" onclick="document.getElementById('v-sandbox-modal').classList.remove('open')">✕</button>
     </div>
   </div>
@@ -1218,7 +1218,7 @@ const HTML_SCRIPT = `
     if (!modal || !editor || !frame) return;
     var html = String(rawCode || editor.value || '').trim();
     if (!html) {
-      html = '<!DOCTYPE html><html><head><style>body{background:#0b0f17;color:#38bdf8;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:90vh;margin:0;}</style></head><body><h2>⚡ VICTOR Live Sandbox Ready</h2></body></html>';
+      html = '<!DOCTYPE html><html><head><style>body{background:#0b0f17;color:#38bdf8;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:90vh;margin:0;}</style></head><body><h2>VICTOR Live Sandbox Ready</h2><' + '/body></html>';
     } else if (!html.toLowerCase().includes('<html') && !html.toLowerCase().includes('<!doctype') && !html.toLowerCase().includes('<body') && !html.toLowerCase().includes('<div') && !html.toLowerCase().includes('<canvas') && !html.toLowerCase().includes('<style')) {
       html = '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#0f172a;color:#f8fafc;font-family:sans-serif;padding:16px;}</style></head><body><div id="app"></div><' + 'script>' + html + '<' + '/script></body></html>';
     }
@@ -1309,8 +1309,8 @@ const HTML_SCRIPT = `
         var idx = window.savedCodeSnippets.push(runnable) - 1;
         var bar = document.createElement('div');
         bar.className = 'v-code-bar';
-        bar.innerHTML = '<button class="v-launch-btn" onclick="window.openSnippetByIndex(' + idx + ')">🚀 Launch Live Preview</button>' +
-          '<button class="v-dl-btn" onclick="window.downloadSnippetByIndex(' + idx + ')">⬇️ Download .HTML</button>';
+        bar.innerHTML = '<button class="v-launch-btn" onclick="window.openSnippetByIndex(' + idx + ')">▶ Launch Live Preview</button>' +
+          '<button class="v-dl-btn" onclick="window.downloadSnippetByIndex(' + idx + ')">↓ Download .HTML</button>';
         el.appendChild(bar);
       }
     }
@@ -1411,6 +1411,60 @@ const HTML_SCRIPT = `
       camBtn.title = 'VICTOR Vision Eye (Camera / Screenshot)';
       camBtn.innerHTML = '📷';
       camBtn.onclick = function() { document.getElementById('v-cam-input').click(); };
+      txtInput.parentElement.insertBefore(camBtn, txtInput);
+    }
+  });
+})();
+</script>
+<script>
+(function(){
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.v-hdr-btn, .v-cam-trigger').forEach(function(el) { el.remove(); });
+
+    var plusBtn = [...document.querySelectorAll('button')].find(function(b) { return b.innerText.trim() === '+'; });
+    var topGroup = plusBtn ? plusBtn.parentElement : null;
+    var btnClass = plusBtn ? plusBtn.className : '';
+    var btnStyle = 'background:#111827;color:#94a3b8;border:1px solid #1e293b;border-radius:10px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;';
+
+    if (topGroup && !document.getElementById('v-svg-chats')) {
+      var chatBtn = document.createElement('button');
+      chatBtn.id = 'v-svg-chats';
+      if (btnClass) chatBtn.className = btnClass;
+      else chatBtn.style.cssText = btnStyle;
+      chatBtn.title = 'Previous Chats (Atlas Logs)';
+      chatBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>';
+      chatBtn.onclick = function() {
+        var dr = document.getElementById('v-drawer');
+        if (dr) dr.classList.toggle('open');
+        if (window.syncVictorOS) window.syncVictorOS({ action: 'status' });
+      };
+
+      var sbBtn = document.createElement('button');
+      sbBtn.id = 'v-svg-sb';
+      if (btnClass) sbBtn.className = btnClass;
+      else sbBtn.style.cssText = btnStyle;
+      sbBtn.title = 'Live Code Sandbox';
+      sbBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
+      sbBtn.onclick = function() {
+        if (window.openVictorSandbox) window.openVictorSandbox('');
+      };
+
+      topGroup.insertBefore(sbBtn, topGroup.firstChild);
+      topGroup.insertBefore(chatBtn, topGroup.firstChild);
+    }
+
+    var txtInput = document.querySelector('input[placeholder*="VICTOR" i], textarea[placeholder*="VICTOR" i], #user-input, #chat-input');
+    if (txtInput && txtInput.parentElement && !document.getElementById('v-svg-cam')) {
+      var camBtn = document.createElement('button');
+      camBtn.id = 'v-svg-cam';
+      camBtn.type = 'button';
+      camBtn.title = 'Vision Inspector';
+      camBtn.style.cssText = 'background:transparent;color:#94a3b8;border:1px solid #1e293b;border-radius:8px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;margin-right:8px;flex-shrink:0;';
+      camBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>';
+      camBtn.onclick = function() {
+        var inp = document.getElementById('v-cam-input');
+        if (inp) inp.click();
+      };
       txtInput.parentElement.insertBefore(camBtn, txtInput);
     }
   });
