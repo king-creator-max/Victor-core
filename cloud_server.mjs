@@ -1416,22 +1416,32 @@ const HTML_SCRIPT = `
   });
 })();
 </script>
+
 <script>
 (function(){
-  document.addEventListener('DOMContentLoaded', function() {
+  function mountVictorIcons() {
     document.querySelectorAll('.v-hdr-btn, .v-cam-trigger').forEach(function(el) { el.remove(); });
 
-    var plusBtn = [...document.querySelectorAll('button')].find(function(b) { return b.innerText.trim() === '+'; });
-    var topGroup = plusBtn ? plusBtn.parentElement : null;
-    var btnClass = plusBtn ? plusBtn.className : '';
-    var btnStyle = 'background:#111827;color:#94a3b8;border:1px solid #1e293b;border-radius:10px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;';
+    var hdr = document.querySelector('header') || document.querySelector('[class*="header" i], [class*="top" i]');
+    var hdrBtns = hdr ? [...hdr.querySelectorAll('button')] : [];
+    var sampleBtn = hdrBtns[0] || null;
+    var topGroup = sampleBtn ? sampleBtn.parentElement : hdr;
+    var btnClass = sampleBtn ? sampleBtn.className : '';
+    var fallbackCss = 'background:#111827;color:#94a3b8;border:1px solid #1e293b;border-radius:10px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;margin-right:6px;';
+
+    // Wire the far-right '+' SVG button to start a new chat thread
+    if (hdrBtns.length > 0 && window.startNewVictorChat) {
+      var lastBtn = hdrBtns[hdrBtns.length - 1];
+      lastBtn.onclick = window.startNewVictorChat;
+    }
 
     if (topGroup && !document.getElementById('v-svg-chats')) {
       var chatBtn = document.createElement('button');
       chatBtn.id = 'v-svg-chats';
+      chatBtn.type = 'button';
       if (btnClass) chatBtn.className = btnClass;
-      else chatBtn.style.cssText = btnStyle;
-      chatBtn.title = 'Previous Chats (Atlas Logs)';
+      else chatBtn.style.cssText = fallbackCss;
+      chatBtn.title = 'Chat History (Atlas Logs)';
       chatBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>';
       chatBtn.onclick = function() {
         var dr = document.getElementById('v-drawer');
@@ -1441,8 +1451,9 @@ const HTML_SCRIPT = `
 
       var sbBtn = document.createElement('button');
       sbBtn.id = 'v-svg-sb';
+      sbBtn.type = 'button';
       if (btnClass) sbBtn.className = btnClass;
-      else sbBtn.style.cssText = btnStyle;
+      else sbBtn.style.cssText = fallbackCss;
       sbBtn.title = 'Live Code Sandbox';
       sbBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
       sbBtn.onclick = function() {
@@ -1467,7 +1478,14 @@ const HTML_SCRIPT = `
       };
       txtInput.parentElement.insertBefore(camBtn, txtInput);
     }
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountVictorIcons);
+  } else {
+    mountVictorIcons();
+  }
+  setTimeout(mountVictorIcons, 600);
 })();
 </script>
 </body>
