@@ -4,7 +4,8 @@
   "type": "module",
   "main": "cloud_server.mjs",
   "bin": {
-    "victor": "./index.js"
+    "victor": "./victor_bridge.mjs",
+    "victor-cloud": "./victor_bridge.mjs"
   },
   "scripts": {
     "start": "node cloud_server.mjs"
