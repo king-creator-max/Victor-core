@@ -1,6 +1,6 @@
 {
   "name": "victor-ai-ujjaval",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "main": "cloud_server.mjs",
   "bin": {
@@ -10,23 +10,25 @@
   "scripts": {
     "start": "node cloud_server.mjs"
   },
-  "description": "Victor Core - The advanced cloud-accessible multi-modal web workspace and AI system.",
+  "description": "Victor Core (victor-ai-ujjaval) - Unified Cloud AI Web Workspace on Render and Termux CLI Assistant engineered by Ujjaval.",
   "author": "Ujjaval <king-creator-max@users.noreply.github.com> (https://github.com/king-creator-max)",
+  "homepage": "https://victor-core.onrender.com",
   "repository": {
     "type": "git",
     "url": "https://github.com/king-creator-max/victor-ai-ujjaval.git"
   },
-  "homepage": "https://victor-core.onrender.com",
   "keywords": [
     "victor-core",
     "victor-ai",
+    "victor-ai-ujjaval",
     "ujjaval",
     "king-creator-max",
-    "ai-workspace"
+    "ai-workspace",
+    "termux"
   ],
   "license": "MIT",
   "dependencies": {
-    "@gradio/client": "^1.6.0",
-    "mongodb": "^6.3.0"
+    "@gradio/client": "^1.19.1",
+    "mongodb": "^7.7.0"
   }
 }
