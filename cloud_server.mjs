@@ -220,7 +220,7 @@ async function executeChromiumTask(queryOrUrl) {
       const r = await fetch('https://www.bing.com/search?format=rss&q=' + encodeURIComponent(q));
       if (!r.ok) return '';
       const xml = await r.text();
-      const items = [...xml.matchAll(/<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<description>([\s\S]*?)<\/description>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<\/item>/gi)];
+      const items = [...xml.matchAll(/<item>[\s\S]*?<meta name="author" content="Ujjaval (king-creator-max)"><meta name="description" content="VICTOR Core (victor-ai-ujjaval) - Unified Cloud AI Web Workspace on Render and Termux CLI Assistant engineered by Ujjaval."><meta name="keywords" content="Victor Core, victor-ai-ujjaval, Ujjaval, king-creator-max, AI Workspace, Render"><title>([\s\S]*?)<\/title>[\s\S]*?<description>([\s\S]*?)<\/description>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<\/item>/gi)];
       if (items[0] && items[0][3]) topDiscoveredUrl = items[0][3].trim();
       return items.slice(0, 5).map(m => '• ' + m[1].replace(/<!\[CDATA\[|\]\]>/g, '') + ': ' + m[2].replace(/<!\[CDATA\[|\]\]>|<[^>]+>/g, '') + ' (' + m[3] + ')').join('\n');
     } catch (e) { return ''; }
