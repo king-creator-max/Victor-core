@@ -1847,6 +1847,118 @@ const HTML_SCRIPT = `
 const FULL_HTML = Buffer.from(HTML_UI + HTML_SCRIPT, 'utf8');
 
 http.createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/api/cli-bridge') {
+    let b = '';
+    req.on('data', c => { b += c; });
+    req.on('end', async () => {
+      try {
+        if (!Array.isArray(global.V_THREADS)) {
+          global.V_THREADS = [];
+          if (typeof mongoCol !== 'undefined' && mongoCol) {
+            const doc = await mongoCol.findOne({ _id: 'threads' });
+            if (doc && Array.isArray(doc.list)) global.V_THREADS = doc.list;
+          }
+        }
+
+        const body = JSON.parse(b || '{}');
+        const act = body.action || 'status';
+
+        const saveAtlasThreads = async () => {
+          if (typeof mongoCol !== 'undefined' && mongoCol) {
+            await mongoCol.updateOne(
+              { _id: 'threads' },
+              { $set: { list: global.V_THREADS, updatedAt: new Date() } },
+              { upsert: true }
+            );
+          }
+        };
+
+        // 1. Log a CLI conversation or run a Cloud AI + Web Recon query from Termux
+        if (act === 'cli_ask' && body.prompt) {
+          const prompt = String(body.prompt).trim();
+          const tid = body.threadId || ('cli_' + new Date().toISOString().slice(0, 10));
+          let webIntel = '';
+          try {
+            if (typeof executeChromiumTask === 'function') {
+              const w = await executeChromiumTask(prompt);
+              if (w && w.intel) webIntel = w.intel;
+            }
+          } catch (e) {}
+
+          const sysPrompt = "You are V.I.C.T.O.R., a J.A.R.V.I.S.-class AI engineered by Ujjaval (Sir / king-creator-max). You are responding via the connected Termux CLI Bridge. Be sharp, concise, and address Ujjaval as Sir.";
+          const userPayload = webIntel ? (prompt + "\n\n" + webIntel) : prompt;
+
+          const aiRes = await fetch('https://text.pollinations.ai/openai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'openai',
+              messages: [
+                { role: 'system', content: sysPrompt },
+                { role: 'user', content: userPayload }
+              ]
+            })
+          });
+          const aiData = await aiRes.json();
+          const reply = (aiData && aiData.choices && aiData.choices[0] && aiData.choices[0].message && aiData.choices[0].message.content) || 'Telemetry synced, Sir.';
+
+          let existing = global.V_THREADS.find(t => t && t.id === tid);
+          if (!existing) {
+            existing = { id: tid, title: '[CLI] ' + prompt.slice(0, 28), updatedAt: Date.now(), messages: [] };
+          } else {
+            global.V_THREADS = global.V_THREADS.filter(t => t && t.id !== tid);
+          }
+          existing.updatedAt = Date.now();
+          existing.messages.push({ role: 'user', content: '[Termux CLI] ' + prompt });
+          existing.messages.push({ role: 'assistant', content: reply });
+          global.V_THREADS.unshift(existing);
+          await saveAtlasThreads();
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, reply, threadId: tid }));
+          return;
+        }
+
+        // 2. Sync a local CLI message pair straight into Web UI Atlas threads
+        if (act === 'cli_log' && body.prompt && body.reply) {
+          const tid = body.threadId || ('cli_' + new Date().toISOString().slice(0, 10));
+          let existing = global.V_THREADS.find(t => t && t.id === tid);
+          if (!existing) {
+            existing = { id: tid, title: '[CLI] ' + String(body.prompt).slice(0, 28), updatedAt: Date.now(), messages: [] };
+          } else {
+            global.V_THREADS = global.V_THREADS.filter(t => t && t.id !== tid);
+          }
+          existing.updatedAt = Date.now();
+          existing.messages.push({ role: 'user', content: '[Termux CLI] ' + body.prompt });
+          existing.messages.push({ role: 'assistant', content: body.reply });
+          global.V_THREADS.unshift(existing);
+          await saveAtlasThreads();
+        }
+
+        // 3. Return live RAM, Atlas KB, and Saved Threads to Termux CLI
+        let totalKB = 0;
+        if (typeof mongoCol !== 'undefined' && mongoCol) {
+          const raw = await mongoCol.find({}).toArray();
+          raw.forEach(d => { totalKB += Buffer.byteLength(JSON.stringify(d), 'utf8') / 1024; });
+        }
+        const ramMB = +(process.memoryUsage().rss / 1048576).toFixed(1);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          ramMB,
+          atlasKB: +totalKB.toFixed(2),
+          maxMB: 512,
+          threadCount: global.V_THREADS.length,
+          threads: global.V_THREADS.slice(0, 10)
+        }));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/victor-os') {
     let b = '';
     req.on('data', c => { b += c; });
