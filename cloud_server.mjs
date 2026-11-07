@@ -682,9 +682,6 @@ const HTML_UI = `<!DOCTYPE html>
 
 const HTML_SCRIPT = `
   <script>
-window.__LAST_VICTOR_MSG = '';
-document.addEventListener('input', function(e) { if (e.target && e.target.type !== 'password' && typeof e.target.value === 'string' && e.target.value.trim()) { window.__LAST_VICTOR_MSG = e.target.value.trim(); } }, true);
-
     const MASTER_B64 = "${PASS_B64}";
     const LOGO_MINI = ${JSON.stringify(VICTOR_LOGO_SVG)};
     let activeGroqKey = "${VAULT.gsk}" || localStorage.getItem('victor_groq_key') || '';
@@ -896,7 +893,7 @@ document.addEventListener('input', function(e) { if (e.target && e.target.type !
         const d = await r.json();
         return d.choices?.[0]?.message?.content || 'No response.';
       }
-      return (await (async () => { try { const uMsg = (typeof window !== "undefined" && window.__LAST_VICTOR_MSG) || (typeof text === "string" && text) || (typeof msg === "string" && msg) || (typeof q === "string" && q) || "Hello"; if (typeof globalThis.executeSevenCoreRouter === "function") { return await globalThis.executeSevenCoreRouter(uMsg); } const r = await fetch("/api/hybrid-router", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: String(uMsg) }) }); const d = await r.json(); return d?.reply || "Online and ready, Sir."; } catch(e) { return "Online and ready, Sir."; } })());
+      return (await globalThis.runVictorSevenRouter(typeof prompt === "string" ? prompt : (typeof message === "string" ? message : (typeof userMsg === "string" ? userMsg : (typeof text === "string" ? text : undefined)))));
     }
 
     async function recordTurn(userMsg, victorReply) {
@@ -1844,54 +1841,232 @@ document.addEventListener('input', function(e) { if (e.target && e.target.type !
   }, 400);
 })();
 </script>
+<script src="/victor_voice.js"></script>
 </body>
 </html>`;
 
 const FULL_HTML = Buffer.from(HTML_UI + HTML_SCRIPT, 'utf8');
 
 http.createServer(async (req, res) => {
+  // === CAPTURE INCOMING PROMPT ON SERVER ===
+  if (req.method === 'POST') {
+    req.on('data', chunk => {
+      try {
+        const raw = chunk.toString();
+        if (raw.includes('{')) {
+          const parsed = JSON.parse(raw);
+          const extracted = parsed.prompt || parsed.message || parsed.text || parsed.q || parsed.input || (Array.isArray(parsed.messages) && parsed.messages[parsed.messages.length - 1]?.content);
+          if (extracted && typeof extracted === 'string') globalThis.__LAST_SERVER_PROMPT = extracted.trim();
+        }
+      } catch (e) {}
+    });
+  }
 
-  globalThis.executeSevenCoreRouter = async function(rawPrompt) {
-    const userPrompt = String(rawPrompt || 'Hello').trim();
+  // === POLLINATIONS DEEP VOICE (ONYX) TTS ENDPOINT ===
+  if (req.method === 'POST' && req.url === '/api/victor-voice') {
+    let b = '';
+    req.on('data', c => { b += c; });
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(b || '{}');
+        const cleanText = String(body.text || 'Online and ready, Sir.').replace(/```[\s\S]*?```/g, 'Code block generated, Sir.').replace(/[*#_`~>|]/g, '').slice(0, 650);
+        const hdrs = { 'Content-Type': 'application/json' };
+        if (process.env.POLLINATIONS_API_KEY) hdrs['Authorization'] = 'Bearer ' + process.env.POLLINATIONS_API_KEY;
+        const r = await fetch('https://text.pollinations.ai/openai', {
+          method: 'POST',
+          headers: hdrs,
+          body: JSON.stringify({
+            model: 'openai-audio',
+            modalities: ['text', 'audio'],
+            audio: { voice: 'onyx', format: 'mp3' },
+            messages: [
+              { role: 'system', content: 'Read the following response aloud in a calm, deep Jarvis-like tone. Output only the spoken words.' },
+              { role: 'user', content: cleanText }
+            ]
+          }),
+          signal: AbortSignal.timeout(14000)
+        });
+        const d = await r.json();
+        const audioBase64 = d?.choices?.[0]?.message?.audio?.data || null;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: Boolean(audioBase64), audio: audioBase64 }));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false }));
+      }
+    });
+    return;
+  }
+
+  // === 7-CORE HYBRID API ROUTER (SERVER-SIDE) ===
+  globalThis.runVictorSevenRouter = async function(explicitPrompt) {
+    const userPrompt = String(explicitPrompt || globalThis.__LAST_SERVER_PROMPT || 'Hello').trim();
     const p = userPrompt.toLowerCase();
+
     if (/^(router status|api status|check keys)$/i.test(p)) {
       const ck = (k) => (process.env[k] ? 'ACTIVE' : 'MISSING');
-      return ['### VICTOR 7-Core Hybrid API Router Status', '- **GROQ_API_KEY:** ' + ck('GROQ_API_KEY'), '- **NVIDIA_API_KEY:** ' + ck('NVIDIA_API_KEY'), '- **GEMINI_API_KEY:** ' + ck('GEMINI_API_KEY'), '- **AIML_API_KEY:** ' + ck('AIML_API_KEY'), '- **TAVILY_API_KEY:** ' + ck('TAVILY_API_KEY'), '- **POLLINATIONS_API_KEY:** ' + ck('POLLINATIONS_API_KEY'), '- **MONGODB_URI:** ' + ck('MONGODB_URI'), '- **MASTER_PASS:** ' + ck('MASTER_PASS')].join('\n');
+      return [
+        '### VICTOR 7-Core Hybrid API Router Status',
+        '- **1. GROQ_API_KEY (Fast Jarvis LPU):** ' + ck('GROQ_API_KEY'),
+        '- **2. NVIDIA_API_KEY (Code & Website Builder NIM):** ' + ck('NVIDIA_API_KEY'),
+        '- **3. GEMINI_API_KEY (Deep Reasoning & Math/Science):** ' + ck('GEMINI_API_KEY'),
+        '- **4. AIML_API_KEY (Executive Multi-Model):** ' + ck('AIML_API_KEY'),
+        '- **5. TAVILY_API_KEY (Live Web Search RAG):** ' + ck('TAVILY_API_KEY'),
+        '- **6. POLLINATIONS_API_KEY (Deep Onyx Voice & Failsafe):** ' + ck('POLLINATIONS_API_KEY'),
+        '- **7. MONGODB_URI (Atlas Cloud Memory):** ' + ck('MONGODB_URI'),
+        '- **8. MASTER_PASS (Security Gate):** ' + ck('MASTER_PASS')
+      ].join('\n');
     }
+
     let task = 'fast_chat';
-    if (/\b(code|html|css|javascript|js|python|node|bash|script|function|bug|error|fix|sql|react|api|app|website|ui|regex|algorithm)\b/i.test(p)) task = 'code';
-    else if (/\b(explain|why|how does|prove|calculate|math|physics|chemistry|iit|architecture|compare|analyze|deep|theory|circuit|hardware)\b/i.test(p) || p.length > 280) task = 'reasoning';
+    if (/\b(code|html|css|javascript|js|python|node|bash|script|function|bug|error|fix|sql|react|api|app|website|webpage|ui|regex|algorithm|make a|build a)\b/i.test(p)) task = 'code';
+    else if (/\b(explain|why|how does|prove|calculate|math|physics|chemistry|iit|architecture|compare|analyze|deep|theory|circuit|hardware)\b/i.test(p) || p.length > 260) task = 'reasoning';
     else if (/\b(report|essay|strategy|plan|documentation|readme|article|summary|synthesize|briefing)\b/i.test(p)) task = 'aiml';
 
     let webIntel = '';
     if (process.env.TAVILY_API_KEY && /\b(latest|news|today|current|price|weather|who is|what is|search|web|live|2025|2026|update|score|release)\b/i.test(p)) {
       try {
-        const tr = await fetch('https://api.tavily.com/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: userPrompt.slice(0, 380), search_depth: 'basic', include_answer: true, max_results: 4 }), signal: AbortSignal.timeout(6000) });
-        if (tr.ok) { const td = await tr.json(); webIntel = '\n[TAVILY INTEL]:\n' + (td.answer || '') + '\n' + (td.results || []).map(r => '- ' + r.title + ': ' + r.content).join('\n'); }
+        const tr = await fetch('https://api.tavily.com/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: userPrompt.slice(0, 380), search_depth: 'basic', include_answer: true, max_results: 4 }),
+          signal: AbortSignal.timeout(6000)
+        });
+        if (tr.ok) {
+          const td = await tr.json();
+          const snip = (td.results || []).map(r => '- ' + r.title + ': ' + r.content).join('\n');
+          webIntel = '\n[TAVILY LIVE WEB INTEL]:\n' + (td.answer ? td.answer + '\n' : '') + snip + '\n';
+        }
       } catch (e) {}
     }
-    const sys = 'You are VICTOR (VICTOR AI / VICTOR Core), a personal AI inspired from Jarvis created by independent developer Ujjaval (Sir / king-creator-max). Address Ujjaval as Sir. Be sharp, accurate, and helpful.' + webIntel;
 
-    const askGroq = async () => { if (!process.env.GROQ_API_KEY) throw 0; const r = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.GROQ_API_KEY }, body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.35 }), signal: AbortSignal.timeout(12000) }); const d = await r.json(); return d?.choices?.[0]?.message?.content; };
-    const askNvidia = async () => { if (!process.env.NVIDIA_API_KEY) throw 0; for (const m of ['qwen/qwen2.5-coder-32b-instruct', 'meta/llama-3.3-70b-instruct']) { try { const r = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.NVIDIA_API_KEY }, body: JSON.stringify({ model: m, messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.2, max_tokens: 2048 }), signal: AbortSignal.timeout(14000) }); if (r.ok) { const d = await r.json(); if (d?.choices?.[0]?.message?.content) return d.choices[0].message.content; } } catch (e) {} } throw 0; };
-    const askGemini = async () => { if (!process.env.GEMINI_API_KEY) throw 0; for (const m of ['gemini-2.5-flash', 'gemini-1.5-flash']) { try { const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + process.env.GEMINI_API_KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents: [{ role: 'user', parts: [{ text: userPrompt }] }] }), signal: AbortSignal.timeout(13000) }); if (r.ok) { const d = await r.json(); if (d?.candidates?.[0]?.content?.parts?.[0]?.text) return d.candidates[0].content.parts[0].text; } } catch (e) {} } throw 0; };
-    const askAiml = async () => { if (!process.env.AIML_API_KEY) throw 0; const r = await fetch('https://api.aimlapi.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.AIML_API_KEY }, body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.3 }), signal: AbortSignal.timeout(12000) }); const d = await r.json(); return d?.choices?.[0]?.message?.content; };
-    const askPollinations = async () => { const hdrs = { 'Content-Type': 'application/json' }; if (process.env.POLLINATIONS_API_KEY) hdrs['Authorization'] = 'Bearer ' + process.env.POLLINATIONS_API_KEY; const r = await fetch('https://text.pollinations.ai/openai', { method: 'POST', headers: hdrs, body: JSON.stringify({ model: 'openai', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }] }), signal: AbortSignal.timeout(12000) }); const d = await r.json(); return d?.choices?.[0]?.message?.content || 'Online and ready, Sir.'; };
+    const sys = 'You are VICTOR (VICTOR AI / VICTOR Core), a personal AI inspired from Jarvis created by independent developer Ujjaval (Sir / king-creator-max). Address Ujjaval as Sir. When asked for a website or app, provide complete, modern, single-file HTML/CSS/JS inside a ```html code block so the Live Preview sandbox can launch it.' + webIntel;
 
-    const chains = { code: [askNvidia, askGroq, askGemini, askAiml, askPollinations], reasoning: [askGemini, askAiml, askNvidia, askGroq, askPollinations], aiml: [askAiml, askGemini, askGroq, askNvidia, askPollinations], fast_chat: [askGroq, askGemini, askNvidia, askAiml, askPollinations] };
-    for (const fn of (chains[task] || chains.fast_chat)) { try { const reply = await fn(); if (reply && String(reply).trim()) return reply; } catch (e) {} }
-    return 'All systems online and standing by, Sir.';
+    const askGroq = async () => {
+      if (!process.env.GROQ_API_KEY) throw new Error('No Groq');
+      const r = await fetch('[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.GROQ_API_KEY },
+        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.35 }),
+        signal: AbortSignal.timeout(14000)
+      });
+      if (!r.ok) throw new Error('Groq ' + r.status);
+      const d = await r.json();
+      return d?.choices?.[0]?.message?.content;
+    };
+
+    const askNvidia = async () => {
+      if (!process.env.NVIDIA_API_KEY) throw new Error('No Nvidia');
+      for (const m of ['qwen/qwen2.5-coder-32b-instruct', 'meta/llama-3.3-70b-instruct']) {
+        try {
+          const r = await fetch('[https://integrate.api.nvidia.com/v1/chat/completions](https://integrate.api.nvidia.com/v1/chat/completions)', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.NVIDIA_API_KEY },
+            body: JSON.stringify({ model: m, messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.2, max_tokens: 3000 }),
+            signal: AbortSignal.timeout(16000)
+          });
+          if (r.ok) { const d = await r.json(); if (d?.choices?.[0]?.message?.content) return d.choices[0].message.content; }
+        } catch (e) {}
+      }
+      throw new Error('Nvidia failed');
+    };
+
+    const askGemini = async () => {
+      if (!process.env.GEMINI_API_KEY) throw new Error('No Gemini');
+      for (const m of ['gemini-2.5-flash', 'gemini-1.5-flash']) {
+        try {
+          const r = await fetch('[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/)' + m + ':generateContent?key=' + process.env.GEMINI_API_KEY, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents: [{ role: 'user', parts: [{ text: userPrompt }] }] }),
+            signal: AbortSignal.timeout(14000)
+          });
+          if (r.ok) { const d = await r.json(); if (d?.candidates?.[0]?.content?.parts?.[0]?.text) return d.candidates[0].content.parts[0].text; }
+        } catch (e) {}
+      }
+      throw new Error('Gemini failed');
+    };
+
+    const askAiml = async () => {
+      if (!process.env.AIML_API_KEY) throw new Error('No AIML');
+      const r = await fetch('[https://api.aimlapi.com/v1/chat/completions](https://api.aimlapi.com/v1/chat/completions)', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.AIML_API_KEY },
+        body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.3 }),
+        signal: AbortSignal.timeout(13000)
+      });
+      if (!r.ok) throw new Error('AIML ' + r.status);
+      const d = await r.json();
+      return d?.choices?.[0]?.message?.content;
+    };
+
+    const askPollinations = async () => {
+      const hdrs = { 'Content-Type': 'application/json' };
+      if (process.env.POLLINATIONS_API_KEY) hdrs['Authorization'] = 'Bearer ' + process.env.POLLINATIONS_API_KEY;
+      const r = await fetch('[https://text.pollinations.ai/openai](https://text.pollinations.ai/openai)', {
+        method: 'POST',
+        headers: hdrs,
+        body: JSON.stringify({ model: 'openai', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }] }),
+        signal: AbortSignal.timeout(14000)
+      });
+      const d = await r.json();
+      return d?.choices?.[0]?.message?.content;
+    };
+
+    const chains = {
+      code: [askNvidia, askGroq, askGemini, askAiml, askPollinations],
+      reasoning: [askGemini, askAiml, askNvidia, askGroq, askPollinations],
+      aiml: [askAiml, askGemini, askGroq, askNvidia, askPollinations],
+      fast_chat: [askGroq, askGemini, askNvidia, askAiml, askPollinations]
+    };
+
+    for (const fn of (chains[task] || chains.fast_chat)) {
+      try {
+        const out = await fn();
+        if (out && String(out).trim()) return out;
+      } catch (e) {}
+    }
+    return 'All systems online, Sir.';
   };
 
-  if (req.method === 'POST' && req.url === '/api/hybrid-router') {
-    let b = ''; req.on('data', c => { b += c; });
-    req.on('end', async () => {
-      try { const body = JSON.parse(b || '{}'); const reply = await globalThis.executeSevenCoreRouter(body.prompt || 'Hello'); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, reply })); }
-      catch (e) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, reply: 'Online and ready, Sir.' })); }
-    });
+  // === STANDALONE DEEP VOICE CLIENT SCRIPT ===
+  if (req.method === 'GET' && req.url === '/victor_voice.js') {
+    const vjs = [
+      '(function(){',
+      '  window.playVictorDeepVoice = async function(text) {',
+      '    if (!text) return;',
+      '    try {',
+      '      const r = await fetch("/api/victor-voice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });',
+      '      const d = await r.json();',
+      '      if (d && d.ok && d.audio) {',
+      '        if (window.__vAudio) { try { window.__vAudio.pause(); } catch(e){} }',
+      '        window.__vAudio = new Audio("data:audio/mp3;base64," + d.audio);',
+      '        window.__vAudio.play().catch(()=>{});',
+      '      }',
+      '    } catch(e) {}',
+      '  };',
+      '  const origFetch = window.fetch;',
+      '  window.fetch = async function() {',
+      '    const res = await origFetch.apply(this, arguments);',
+      '    try {',
+      '      const url = String(arguments[0] || "");',
+      '      if (url.includes("/api/chat") || url.includes("/api/cli-bridge")) {',
+      '        res.clone().json().then(d => {',
+      '          const reply = d.reply || d.response || d.content || d.text || (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content);',
+      '          const spkBtn = Array.from(document.querySelectorAll("button")).find(b => b.innerHTML.includes("polygon") || b.title?.toLowerCase().includes("voice") || b.title?.toLowerCase().includes("speak"));',
+      '          const isMuted = spkBtn && spkBtn.classList.contains("muted");',
+      '          if (reply && !isMuted) window.playVictorDeepVoice(reply);',
+      '        }).catch(()=>{});',
+      '      }',
+      '    } catch(e) {}',
+      '    return res;',
+      '  };',
+      '})();'
+    ].join('\n');
+    res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+    res.end(vjs);
     return;
   }
-
   if (req.method === 'POST' && req.url === '/api/cli-bridge') {
     let b = '';
     req.on('data', c => { b += c; });
