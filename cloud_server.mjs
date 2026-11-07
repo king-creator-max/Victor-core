@@ -683,11 +683,7 @@ const HTML_UI = `<!DOCTYPE html>
 const HTML_SCRIPT = `
   <script>
 window.__LAST_VICTOR_MSG = '';
-document.addEventListener('input', function(e) {
-  if (e.target && e.target.type !== 'password' && typeof e.target.value === 'string' && e.target.value.trim()) {
-    window.__LAST_VICTOR_MSG = e.target.value.trim();
-  }
-}, true);
+document.addEventListener('input', function(e) { if (e.target && e.target.type !== 'password' && typeof e.target.value === 'string' && e.target.value.trim()) { window.__LAST_VICTOR_MSG = e.target.value.trim(); } }, true);
 
     const MASTER_B64 = "${PASS_B64}";
     const LOGO_MINI = ${JSON.stringify(VICTOR_LOGO_SVG)};
@@ -900,7 +896,7 @@ document.addEventListener('input', function(e) {
         const d = await r.json();
         return d.choices?.[0]?.message?.content || 'No response.';
       }
-      return (await (async () => { try { const uMsg = (typeof window !== "undefined" && window.__LAST_VICTOR_MSG) || (typeof text === "string" && text) || (typeof msg === "string" && msg) || (typeof q === "string" && q) || (typeof prompt === "string" && prompt) || "Hello"; if (typeof globalThis.executeSevenCoreRouter === "function") { return await globalThis.executeSevenCoreRouter(uMsg); } const r = await fetch("/api/hybrid-router", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: String(uMsg) }) }); const d = await r.json(); return d?.reply || "Online and ready, Sir."; } catch(e) { return "Online and ready, Sir."; } })());
+      return (await (async () => { try { const uMsg = (typeof window !== "undefined" && window.__LAST_VICTOR_MSG) || (typeof text === "string" && text) || (typeof msg === "string" && msg) || (typeof q === "string" && q) || "Hello"; if (typeof globalThis.executeSevenCoreRouter === "function") { return await globalThis.executeSevenCoreRouter(uMsg); } const r = await fetch("/api/hybrid-router", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: String(uMsg) }) }); const d = await r.json(); return d?.reply || "Online and ready, Sir."; } catch(e) { return "Online and ready, Sir."; } })());
     }
 
     async function recordTurn(userMsg, victorReply) {
@@ -991,7 +987,7 @@ document.addEventListener('input', function(e) {
       recordTurn(msg, reply);
       speakNeural(reply);
     }
-  <\/script>
+  </script>
 <script>
 (function(){
   function unlock(){
@@ -1009,7 +1005,7 @@ document.addEventListener('input', function(e) {
     if(i)i.addEventListener('keydown',function(ev){if(ev.key==='Enter')unlock();});
   });
 })();
-<\/script><script>
+</script><script>
 (function(){
   const origFetch = window.fetch;
   window.fetch = async function(url, opts) {
@@ -1051,7 +1047,7 @@ document.addEventListener('input', function(e) {
     return origFetch.apply(this, arguments);
   };
 })();
-<\/script><style>
+</script><style>
 #v-drawer { position:fixed; top:0; left:-310px; width:290px; height:100%; background:#0b0f17; border-right:1px solid #1e293b; z-index:9999; transition:left 0.25s ease; display:flex; flex-direction:column; padding:14px; box-sizing:border-box; color:#e2e8f0; font-family:sans-serif; }
 #v-drawer.open { left:0; box-shadow: 8px 0 30px rgba(0,0,0,0.8); }
 .v-th-item { background:#151c28; border:1px solid #1e293b; border-radius:10px; padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; }
@@ -1131,8 +1127,7 @@ document.addEventListener('input', function(e) {
     if (!html) {
       html = '<!DOCTYPE html><html><head><style>body{background:#0b0f17;color:#38bdf8;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:90vh;margin:0;}</style></head><body><h2>VICTOR Live Sandbox Ready</h2><' + '/body></html>';
     } else if (!html.toLowerCase().includes('<html') && !html.toLowerCase().includes('<!doctype') && !html.toLowerCase().includes('<body') && !html.toLowerCase().includes('<div') && !html.toLowerCase().includes('<canvas') && !html.toLowerCase().includes('<style')) {
-      html = '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#0f172a;color:#f8fafc;font-family:sans-serif;padding:16px;}</style><script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Victor","alternateName":["VICTOR AI","VICTOR Core","victor-ai-ujjaval"],"applicationCategory":"ArtificialIntelligenceApplication","operatingSystem":"Web, Linux, Android","url":"https://victor-core.onrender.com","description":"Victor is a personal AI inspired from Jarvis created by an independent developer Ujjaval (king-creator-max).","creator":{"@type":"Person","name":"Ujjaval","alternateName":"king-creator-max","url":"https://github.com/king-creator-max"}}</script>
-</head><body><div id="app"></div><' + 'script>' + html + '<' + '/script></body></html>';
+      html = '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#0f172a;color:#f8fafc;font-family:sans-serif;padding:16px;}</style></head><body><div id="app"></div><' + 'script>' + html + '<' + '/script></body></html>';
     }
     editor.value = html;
     frame.srcdoc = html;
@@ -1327,7 +1322,7 @@ document.addEventListener('input', function(e) {
     }
   });
 })();
-<\/script>
+</script>
 
 <script>
 (function(){
@@ -1399,7 +1394,7 @@ document.addEventListener('input', function(e) {
   }
   setTimeout(mountVictorIcons, 600);
 })();
-<\/script>
+</script>
 
 <style>
 #v-jarvis-hud { position:fixed; bottom:125px; left:50%; transform:translateX(-50%); background:#090d16; border:1px solid #1e293b; border-radius:10px; padding:8px 14px; display:none; align-items:center; gap:12px; z-index:9500; box-shadow:0 8px 25px rgba(0,0,0,0.75); font-family:monospace; font-size:11px; color:#64748b; white-space:nowrap; }
@@ -1535,7 +1530,7 @@ document.addEventListener('input', function(e) {
   }
   setTimeout(mountAgentButton, 800);
 })();
-<\/script>
+</script>
 <style>
 #v-voice-modal { position:fixed; inset:0; background:#000000; z-index:10020; display:none; flex-direction:column; justify-content:space-between; align-items:center; padding:22px 20px 28px 20px; box-sizing:border-box; font-family:sans-serif; user-select:none; }
 #v-voice-modal.open { display:flex; }
@@ -1605,7 +1600,7 @@ document.addEventListener('input', function(e) {
   }
   setTimeout(hideUnwantedButtons, 500);
 })();
-<\/script>
+</script>
 
 
 
@@ -1718,7 +1713,7 @@ document.addEventListener('input', function(e) {
       '<div>' + rows + '</div>';
   };
 })();
-<\/script>
+</script>
 <script>
 (function(){
   function getLocal() {
@@ -1855,25 +1850,14 @@ document.addEventListener('input', function(e) {
 const FULL_HTML = Buffer.from(HTML_UI + HTML_SCRIPT, 'utf8');
 
 http.createServer(async (req, res) => {
-  // === VICTOR 7-CORE HYBRID API ROUTER ===
+
   globalThis.executeSevenCoreRouter = async function(rawPrompt) {
     const userPrompt = String(rawPrompt || 'Hello').trim();
     const p = userPrompt.toLowerCase();
     if (/^(router status|api status|check keys)$/i.test(p)) {
       const ck = (k) => (process.env[k] ? 'ACTIVE' : 'MISSING');
-      return [
-        '### VICTOR 7-Core Hybrid API Router Status',
-        '- **1. GROQ_API_KEY (Fast LPU Chat):** ' + ck('GROQ_API_KEY'),
-        '- **2. NVIDIA_API_KEY (Code & Sandbox NIM):** ' + ck('NVIDIA_API_KEY'),
-        '- **3. GEMINI_API_KEY (Deep Reasoning & Vision):** ' + ck('GEMINI_API_KEY'),
-        '- **4. AIML_API_KEY (Executive Synthesis):** ' + ck('AIML_API_KEY'),
-        '- **5. TAVILY_API_KEY (Live Web Search RAG):** ' + ck('TAVILY_API_KEY'),
-        '- **6. POLLINATIONS_API_KEY (Creative & Failsafe):** ' + ck('POLLINATIONS_API_KEY'),
-        '- **7. MONGODB_URI (Atlas Cloud Memory):** ' + ck('MONGODB_URI'),
-        '- **8. MASTER_PASS (Security Gate):** ' + ck('MASTER_PASS')
-      ].join('\n');
+      return ['### VICTOR 7-Core Hybrid API Router Status', '- **GROQ_API_KEY:** ' + ck('GROQ_API_KEY'), '- **NVIDIA_API_KEY:** ' + ck('NVIDIA_API_KEY'), '- **GEMINI_API_KEY:** ' + ck('GEMINI_API_KEY'), '- **AIML_API_KEY:** ' + ck('AIML_API_KEY'), '- **TAVILY_API_KEY:** ' + ck('TAVILY_API_KEY'), '- **POLLINATIONS_API_KEY:** ' + ck('POLLINATIONS_API_KEY'), '- **MONGODB_URI:** ' + ck('MONGODB_URI'), '- **MASTER_PASS:** ' + ck('MASTER_PASS')].join('\n');
     }
-
     let task = 'fast_chat';
     if (/\b(code|html|css|javascript|js|python|node|bash|script|function|bug|error|fix|sql|react|api|app|website|ui|regex|algorithm)\b/i.test(p)) task = 'code';
     else if (/\b(explain|why|how does|prove|calculate|math|physics|chemistry|iit|architecture|compare|analyze|deep|theory|circuit|hardware)\b/i.test(p) || p.length > 280) task = 'reasoning';
@@ -1882,125 +1866,32 @@ http.createServer(async (req, res) => {
     let webIntel = '';
     if (process.env.TAVILY_API_KEY && /\b(latest|news|today|current|price|weather|who is|what is|search|web|live|2025|2026|update|score|release)\b/i.test(p)) {
       try {
-        const tr = await fetch('https://api.tavily.com/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: userPrompt.slice(0, 380), search_depth: 'basic', include_answer: true, max_results: 4 }),
-          signal: AbortSignal.timeout(6000)
-        });
-        if (tr.ok) {
-          const td = await tr.json();
-          const snip = (td.results || []).map(r => '- ' + r.title + ': ' + r.content).join('\n');
-          webIntel = '\n[TAVILY LIVE WEB INTEL]:\n' + (td.answer ? td.answer + '\n' : '') + snip + '\n';
-        }
+        const tr = await fetch('https://api.tavily.com/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_key: process.env.TAVILY_API_KEY, query: userPrompt.slice(0, 380), search_depth: 'basic', include_answer: true, max_results: 4 }), signal: AbortSignal.timeout(6000) });
+        if (tr.ok) { const td = await tr.json(); webIntel = '\n[TAVILY INTEL]:\n' + (td.answer || '') + '\n' + (td.results || []).map(r => '- ' + r.title + ': ' + r.content).join('\n'); }
       } catch (e) {}
     }
-
     const sys = 'You are VICTOR (VICTOR AI / VICTOR Core), a personal AI inspired from Jarvis created by independent developer Ujjaval (Sir / king-creator-max). Address Ujjaval as Sir. Be sharp, accurate, and helpful.' + webIntel;
 
-    const askGroq = async () => {
-      if (!process.env.GROQ_API_KEY) throw new Error('No Groq');
-      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.GROQ_API_KEY },
-        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.35 }),
-        signal: AbortSignal.timeout(12000)
-      });
-      if (!r.ok) throw new Error('Groq ' + r.status);
-      const d = await r.json();
-      return d?.choices?.[0]?.message?.content;
-    };
+    const askGroq = async () => { if (!process.env.GROQ_API_KEY) throw 0; const r = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.GROQ_API_KEY }, body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.35 }), signal: AbortSignal.timeout(12000) }); const d = await r.json(); return d?.choices?.[0]?.message?.content; };
+    const askNvidia = async () => { if (!process.env.NVIDIA_API_KEY) throw 0; for (const m of ['qwen/qwen2.5-coder-32b-instruct', 'meta/llama-3.3-70b-instruct']) { try { const r = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.NVIDIA_API_KEY }, body: JSON.stringify({ model: m, messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.2, max_tokens: 2048 }), signal: AbortSignal.timeout(14000) }); if (r.ok) { const d = await r.json(); if (d?.choices?.[0]?.message?.content) return d.choices[0].message.content; } } catch (e) {} } throw 0; };
+    const askGemini = async () => { if (!process.env.GEMINI_API_KEY) throw 0; for (const m of ['gemini-2.5-flash', 'gemini-1.5-flash']) { try { const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + process.env.GEMINI_API_KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents: [{ role: 'user', parts: [{ text: userPrompt }] }] }), signal: AbortSignal.timeout(13000) }); if (r.ok) { const d = await r.json(); if (d?.candidates?.[0]?.content?.parts?.[0]?.text) return d.candidates[0].content.parts[0].text; } } catch (e) {} } throw 0; };
+    const askAiml = async () => { if (!process.env.AIML_API_KEY) throw 0; const r = await fetch('https://api.aimlapi.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.AIML_API_KEY }, body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.3 }), signal: AbortSignal.timeout(12000) }); const d = await r.json(); return d?.choices?.[0]?.message?.content; };
+    const askPollinations = async () => { const hdrs = { 'Content-Type': 'application/json' }; if (process.env.POLLINATIONS_API_KEY) hdrs['Authorization'] = 'Bearer ' + process.env.POLLINATIONS_API_KEY; const r = await fetch('https://text.pollinations.ai/openai', { method: 'POST', headers: hdrs, body: JSON.stringify({ model: 'openai', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }] }), signal: AbortSignal.timeout(12000) }); const d = await r.json(); return d?.choices?.[0]?.message?.content || 'Online and ready, Sir.'; };
 
-    const askNvidia = async () => {
-      if (!process.env.NVIDIA_API_KEY) throw new Error('No Nvidia');
-      for (const m of ['qwen/qwen2.5-coder-32b-instruct', 'meta/llama-3.3-70b-instruct']) {
-        try {
-          const r = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.NVIDIA_API_KEY },
-            body: JSON.stringify({ model: m, messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.2, max_tokens: 2048 }),
-            signal: AbortSignal.timeout(14000)
-          });
-          if (r.ok) { const d = await r.json(); if (d?.choices?.[0]?.message?.content) return d.choices[0].message.content; }
-        } catch (e) {}
-      }
-      throw new Error('Nvidia failed');
-    };
-
-    const askGemini = async () => {
-      if (!process.env.GEMINI_API_KEY) throw new Error('No Gemini');
-      for (const m of ['gemini-2.5-flash', 'gemini-1.5-flash']) {
-        try {
-          const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + process.env.GEMINI_API_KEY, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents: [{ role: 'user', parts: [{ text: userPrompt }] }] }),
-            signal: AbortSignal.timeout(13000)
-          });
-          if (r.ok) { const d = await r.json(); if (d?.candidates?.[0]?.content?.parts?.[0]?.text) return d.candidates[0].content.parts[0].text; }
-        } catch (e) {}
-      }
-      throw new Error('Gemini failed');
-    };
-
-    const askAiml = async () => {
-      if (!process.env.AIML_API_KEY) throw new Error('No AIML');
-      const r = await fetch('https://api.aimlapi.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + process.env.AIML_API_KEY },
-        body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }], temperature: 0.3 }),
-        signal: AbortSignal.timeout(12000)
-      });
-      if (!r.ok) throw new Error('AIML ' + r.status);
-      const d = await r.json();
-      return d?.choices?.[0]?.message?.content;
-    };
-
-    const askPollinations = async () => {
-      const hdrs = { 'Content-Type': 'application/json' };
-      if (process.env.POLLINATIONS_API_KEY) hdrs['Authorization'] = 'Bearer ' + process.env.POLLINATIONS_API_KEY;
-      const r = await fetch('https://text.pollinations.ai/openai', {
-        method: 'POST',
-        headers: hdrs,
-        body: JSON.stringify({ model: 'openai', messages: [{ role: 'system', content: sys }, { role: 'user', content: userPrompt }] }),
-        signal: AbortSignal.timeout(12000)
-      });
-      const d = await r.json();
-      return d?.choices?.[0]?.message?.content || 'Online and ready, Sir.';
-    };
-
-    const chains = {
-      code: [askNvidia, askGroq, askGemini, askAiml, askPollinations],
-      reasoning: [askGemini, askAiml, askNvidia, askGroq, askPollinations],
-      aiml: [askAiml, askGemini, askGroq, askNvidia, askPollinations],
-      fast_chat: [askGroq, askGemini, askNvidia, askAiml, askPollinations]
-    };
-
-    for (const fn of (chains[task] || chains.fast_chat)) {
-      try {
-        const reply = await fn();
-        if (reply && String(reply).trim()) return reply;
-      } catch (e) {}
-    }
+    const chains = { code: [askNvidia, askGroq, askGemini, askAiml, askPollinations], reasoning: [askGemini, askAiml, askNvidia, askGroq, askPollinations], aiml: [askAiml, askGemini, askGroq, askNvidia, askPollinations], fast_chat: [askGroq, askGemini, askNvidia, askAiml, askPollinations] };
+    for (const fn of (chains[task] || chains.fast_chat)) { try { const reply = await fn(); if (reply && String(reply).trim()) return reply; } catch (e) {} }
     return 'All systems online and standing by, Sir.';
   };
 
   if (req.method === 'POST' && req.url === '/api/hybrid-router') {
-    let b = '';
-    req.on('data', c => { b += c; });
+    let b = ''; req.on('data', c => { b += c; });
     req.on('end', async () => {
-      try {
-        const body = JSON.parse(b || '{}');
-        const reply = await globalThis.executeSevenCoreRouter(body.prompt || 'Hello');
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, reply }));
-      } catch (e) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, reply: 'Online and ready, Sir.' }));
-      }
+      try { const body = JSON.parse(b || '{}'); const reply = await globalThis.executeSevenCoreRouter(body.prompt || 'Hello'); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, reply })); }
+      catch (e) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, reply: 'Online and ready, Sir.' })); }
     });
     return;
   }
+
   if (req.method === 'POST' && req.url === '/api/cli-bridge') {
     let b = '';
     req.on('data', c => { b += c; });
